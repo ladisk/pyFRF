@@ -15,7 +15,7 @@ _EXC_TYPES = ['f', 'a', 'v', 'd', 'e']  # force for EMA and kinematics for OMA
 _RESP_TYPES = ['a', 'v', 'd', 'e']  # acceleration, velocity, displacement, strain
 _FRF_TYPES = ['H1', 'H2', 'vector', 'OMA']
 _WGH_TYPES = ['None', 'Linear', 'Exponential']
-_WINDOWS = ['None', 'Hann', 'Hamming', 'Force', 'Exponential']
+_WINDOWS = ['None', 'Hann', 'Hamming', 'Force', 'Exponential', 'Bartlett', 'Blackman', 'Kaiser']
 
 ju_DIRECTIONS = ['scalar', '+x', '+y', '+z', '-x', '-y', '-z']
 _DIRECTIONS_NR = [0, 1, 2, 3, -1, -2 - 3]
@@ -275,8 +275,16 @@ class FRF:
         """
         window = window.split(':')
 
-        if window[0] in ['Hamming', 'Hann']:
+        if window[0] in ['Hanning', 'Hann']:
             w = np.hanning(self.samples)
+        elif window[0] in ['Hamming']:
+            w = np.hamming(self.samples)
+        elif window[0] in ['Bartlett']:
+            w = np.bartlett(self.samples)
+        elif window[0] in ['Blackman']:
+            w = np.blackman(self.samples)
+        elif window[0] in ['Kaiser']:
+            w = np.kaiser(self.samples)
         elif window[0] == 'Force':
             w = np.zeros(self.samples)
             force_window = float(window[1])

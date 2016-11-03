@@ -321,13 +321,13 @@ class FRF:
         self.Resp = np.fft.rfft(self.resp, self.fft_len)
 
         if self.resp_type != 'e':  # if not strain
-            # convert response to 'a' type
+            # convert H1 to receptance
             self.Resp = fft_tools.convert_frf(self.Resp, self.w_axis, input_frf_type=self.resp_type,
-                                              output_frf_type='a')
+                                              output_frf_type='d')
 
             # correct delay
         if self.resp_delay != 0.:
-            self.Exc = fft_tools.correct_time_delay(self.Exc, self.w_axis, self.resp_delay)
+            self.Resp = fft_tools.correct_time_delay(self.Resp, self.w_axis, -self.resp_delay)
 
     def get_ods_frf(self):
         """Operational deflection shape averaged estimator

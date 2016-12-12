@@ -39,6 +39,7 @@ class FRF:
                            (use positive value for a delayed signal)
         :param weighting: weighting type for average calculation, see _WGH_TYPES
         :param n_averages: number of measurements, used for averaging
+               if later data for overlapping is used, the n_averages is automatically defined
         :param fft_len: the length of the FFT
                         If None then the freq length matches the time length
         :param nperseg: int, optional
@@ -156,7 +157,7 @@ class FRF:
             self.add_data(exc, resp)
 
     def add_data_for_overlapping(self, exc, resp):
-        """Adds data and prepares accelerance FRF with the overlapping options
+        """Adds data and prepares FRF with the overlapping options
 
         :param exc: excitation array
         :param resp: response array
@@ -191,7 +192,7 @@ class FRF:
             # go into freq domain
             self._get_fft()
 
-            # get averaged accelerance and coherence
+            # get averaged FRF and coherence
             self._get_frf_av()
 
             # measurement number counter
@@ -199,7 +200,7 @@ class FRF:
             self._data_available = True
 
     def add_data(self, exc, resp):
-        """Adds data and prepares accelerance FRF
+        """Adds data and prepares receptance FRF
 
         :param exc: excitation array
         :param resp: response array
@@ -221,7 +222,7 @@ class FRF:
         # go into freq domain
         self._get_fft()
 
-        # get averaged accelerance and coherence
+        # get averaged FRF and coherence
         self._get_frf_av()
 
         # measurement number counter

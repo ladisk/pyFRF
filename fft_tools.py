@@ -17,14 +17,8 @@
 
 
 """
-Tools to work wit fft data. Especially, frequency response functions
-
-History:
-    -May 2015: code clean up and added separate testing
-    -Jul 2014: FRF dimensions changed from frf[frequency,sample] to frf[sample, frequency], PEP cleaning, Janko Slavic
-    -May 2014: cleaning and polishing of the code, Janko Slavic
-    -Apr 2014: convert_frf, Blaz Starc
-
+Tools to work wit fft data (this file is part of the pyFRF package);
+especially, frequency response functions
 
 """
 

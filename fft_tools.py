@@ -1,4 +1,23 @@
-""" Tools to work wit fft data. Especially, frequency response functions
+
+# Copyright (C) 2014-2017 Martin Česnik, Matjaž Mršnik, Miha Pirnat, Janko Slavič, Blaž Starc (in alphabetic order)
+# 
+# This file is part of pyFRF.
+# 
+# pyFRF is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, version 3 of the License.
+# 
+# pyFRF is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with pyFRF.  If not, see <http://www.gnu.org/licenses/>.
+
+
+"""
+Tools to work wit fft data. Especially, frequency response functions
 
 History:
     -May 2015: code clean up and added separate testing
@@ -6,8 +25,6 @@ History:
     -May 2014: cleaning and polishing of the code, Janko Slavic
     -Apr 2014: convert_frf, Blaz Starc
 
-@author: Janko Slavic, Blaz Starc
-    @contact: janko.slavic@fs.uni-lj.si, blaz.starc@fs.uni-lj.si
 
 """
 

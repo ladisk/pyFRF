@@ -30,11 +30,12 @@ import fft_tools
 
 _EXC_TYPES = ['f', 'a', 'v', 'd', 'e']  # force for EMA and kinematics for OMA
 _RESP_TYPES = ['a', 'v', 'd', 'e']  # acceleration, velocity, displacement, strain
-_FRF_TYPES = ['H1', 'H2', 'vector', 'OMA']
+_FRF_TYPES = ['H1', 'H2', 'Hv', 'vector', 'OMA']
+_FRF_FORM = ['accelerance', 'mobility', 'receptance']
 _WGH_TYPES = ['None', 'Linear', 'Exponential']
 _WINDOWS = ['None', 'Hann', 'Hamming', 'Force', 'Exponential', 'Bartlett', 'Blackman', 'Kaiser']
 
-ju_DIRECTIONS = ['scalar', '+x', '+y', '+z', '-x', '-y', '-z']
+_DIRECTIONS = ['scalar', '+x', '+y', '+z', '-x', '-y', '-z']
 _DIRECTIONS_NR = [0, 1, 2, 3, -1, -2 - 3]
 
 
@@ -401,21 +402,23 @@ class FRF:
             return k * amp**2
 
     def get_H1(self):
-        """H1 FRF averaged estimator
+        """H1 FRF averaged estimator  (receptance), preferable call via get_FRF()
 
         :return: H1 FRF estimator
         """
-        return self.frf_norm * self.S_FX / self.S_FF
+        receptance = self.frf_norm * self.S_FX / self.S_FF;
+        return receptance
 
     def get_H2(self):
-        """H2 FRF averaged estimator
+        """H2 FRF averaged estimator (receptance), preferable call via get_FRF()
 
         :return: H2 FRF estimator
         """
-        return self.frf_norm * self.S_XX / self.S_XF
+        receptance = self.frf_norm * self.S_XX / self.S_XF
+        return receptance
 
     def get_Hv(self):
-        """Hv FRF averaged estimator
+        """Hv FRF averaged estimator (receptance), preferable call via get_FRF()
 
         Literature:
             [1] Kihong and Hammond: Fundamentals of Signal Processing for
@@ -424,29 +427,51 @@ class FRF:
         :return: Hv FRF estimator
         """
         k = 1  # ratio of the spectra of measurement noises
-        return self.frf_norm * ((self.S_XX - k * self.S_FF + np.sqrt(
-            (k * self.S_FF - self.S_XX) ** 2 + 4 * k * np.conj(self.S_FX) * self.S_FX)) / (2 * self.S_XF))
+        receptance = self.frf_norm * ((self.S_XX - k * self.S_FF + np.sqrt(\
+            (k * self.S_FF - self.S_XX) ** 2 + 4 * k * np.conj(self.S_FX) * self.S_FX))\
+                                      / (2 * self.S_XF))
+        return receptance
 
     def get_FRF_vector(self):
-        """Vector FRF averaged estimator
+        """Vector FRF averaged estimator (receptance), preferable call via get_FRF()
 
         :return: FRF vector estimator
         """
         return self.frf_norm * self.S_X / self.S_F
 
-    def get_FRF(self):
+    def get_FRF(self, type='default', form='receptance'):
         """Returns the default FRF function set at init.
 
         :return: FRF estimator
+        :type: choose default (as set at init) or H1, H2, Hv, vector or ODS
+        :form: choose receptance, mobility, accelerance
         """
-        if self.frf_type == 'H1':
-            return self.get_H1()
-        if self.frf_type == 'H2':
-            return self.get_H2()
-        if self.frf_type == 'vector':
-            return self.get_FRF_vector()
-        if self.frf_type == 'ODS':
-            return self.get_ods_frf()
+        if type=='default':
+            type=self.frf_type
+        if not (type in _FRF_TYPES):
+            raise Exception('wrong FRF type given %s (can be %s)'
+                            % (type, _FRF_TYPES))
+
+        if type == 'H1':
+            receptance = self.get_H1()
+        if type == 'H2':
+            receptance = self.get_H2()
+        if type == 'Hv':
+            receptance = self.get_Hv()
+        if type == 'vector':
+            receptance = self.get_FRF_vector()
+        if type == 'ODS':
+            receptance = self.get_ods_frf()
+
+        if not (form in _FRF_FORM):
+            raise Exception('wrong FRF form given %s (can be %s)'
+                            % (form, _FRF_FORM))
+
+        if form=='accelerance':
+            return fft_tools.frequency_derivation(receptance, self.get_f_axis(), order=2)
+        if form=='mobility':
+            return fft_tools.frequency_derivation(receptance, self.get_f_axis(), order=1)
+        return receptance
 
     def get_coherence(self):
         """Coherence

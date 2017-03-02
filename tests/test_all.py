@@ -2,10 +2,11 @@
 Unit test for pyFRF.py
 """
 import numpy as np
-from pyFRF import FRF
 import sys, os
 myPath = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, myPath + '/../')
+
+from pyFRF import FRF
 
 def test_synthetic():
     C = 0.5 + 0.1j  # modal constant

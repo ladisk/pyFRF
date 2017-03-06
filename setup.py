@@ -29,8 +29,9 @@ For a showcase see: https://github.com/openmodal/pyFRF/blob/master/Showcase%20py
 
 #from distutils.core import setup, Extension
 from setuptools import setup, Extension
+from pyFRF import __version__
 setup(name='pyFRF',
-      version='0.31',
+      version=__version__,
       author='Janko Slavič et al.',
       author_email='janko.slavic@fs.uni-lj.si',
       description='Frequency response function as used in structural dynamics.',

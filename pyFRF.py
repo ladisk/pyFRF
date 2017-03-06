@@ -30,7 +30,7 @@ import fft_tools
 
 _EXC_TYPES = ['f', 'a', 'v', 'd', 'e']  # force for EMA and kinematics for OMA
 _RESP_TYPES = ['a', 'v', 'd', 'e']  # acceleration, velocity, displacement, strain
-_FRF_TYPES = ['H1', 'H2', 'Hv', 'vector', 'OMA']
+_FRF_TYPES = ['H1', 'H2', 'Hv', 'vector', 'ODS']
 _FRF_FORM = ['accelerance', 'mobility', 'receptance']
 _WGH_TYPES = ['None', 'Linear', 'Exponential']
 _WINDOWS = ['None', 'Hann', 'Hamming', 'Force', 'Exponential', 'Bartlett', 'Blackman', 'Kaiser']

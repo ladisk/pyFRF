@@ -1,4 +1,4 @@
-
+# -*- coding: utf-8 -*-
 # Copyright (C) 2014-2017 Martin Česnik, Matjaž Mršnik, Miha Pirnat, Janko Slavič, Blaž Starc (in alphabetic order)
 # 
 # This file is part of pyFRF.
@@ -28,7 +28,7 @@ Classes:
 import numpy as np
 import fft_tools
 
-__version__ = '0.32'
+__version__ = '0.34'
 _EXC_TYPES = ['f', 'a', 'v', 'd', 'e']  # force for EMA and kinematics for OMA
 _RESP_TYPES = ['a', 'v', 'd', 'e']  # acceleration, velocity, displacement, strain
 _FRF_TYPES = ['H1', 'H2', 'Hv', 'vector', 'ODS']

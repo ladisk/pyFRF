@@ -28,10 +28,9 @@ For a showcase see: https://github.com/openmodal/pyFRF/blob/master/Showcase%20py
 """
 
 #from distutils.core import setup, Extension
-from setuptools import setup, Extension
-from pyFRF import __version__
+from setuptools import setup
 setup(name='pyFRF',
-      version=__version__,
+      version='0.34',
       author='Janko Slavič et al.',
       author_email='janko.slavic@fs.uni-lj.si',
       description='Frequency response function as used in structural dynamics.',
@@ -39,5 +38,5 @@ setup(name='pyFRF',
       py_modules=['pyFRF','fft_tools'],
       #ext_modules=[Extension('lvm_read', ['data/short.lvm'])],
       long_description=desc,
-      requires=['numpy']
+      install_requires=['numpy']
       )

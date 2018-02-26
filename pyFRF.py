@@ -28,7 +28,7 @@ Classes:
 import numpy as np
 import fft_tools
 
-__version__ = '0.35'
+__version__ = '0.36'
 _EXC_TYPES = ['f', 'a', 'v', 'd', 'e']  # force for EMA and kinematics for OMA
 _RESP_TYPES = ['a', 'v', 'd', 'e']  # acceleration, velocity, displacement, strain
 _FRF_TYPES = ['H1', 'H2', 'Hv', 'vector', 'ODS']
@@ -538,7 +538,7 @@ class FRF:
 
         self.exc_window_data, self.exc_window_amp_norm = self._get_window_sub(self.exc_window)
         self.resp_window_data, self.resp_window_amp_norm = self._get_window_sub(self.resp_window)
-        self.frf_norm = self.exc_window_amp_norm / self.resp_window_amp_norm
+        self.frf_norm = self.resp_window_amp_norm / self.exc_window_amp_norm
 
     def _add_to_archive(self, exc, resp):
         """Add time data to the archive for later data analysis

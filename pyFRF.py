@@ -538,7 +538,7 @@ class FRF:
 
         self.exc_window_data, self.exc_window_amp_norm = self._get_window_sub(self.exc_window)
         self.resp_window_data, self.resp_window_amp_norm = self._get_window_sub(self.resp_window)
-        self.frf_norm = self.exc_window_amp_norm**2 / self.resp_window_amp_norm**2
+        self.frf_norm = self.exc_window_amp_norm / self.resp_window_amp_norm
 
     def _add_to_archive(self, exc, resp):
         """Add time data to the archive for later data analysis

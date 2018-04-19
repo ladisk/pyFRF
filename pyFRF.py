@@ -304,7 +304,8 @@ class FRF:
         elif window[0] in ['Blackman']:
             w = np.blackman(self.samples)
         elif window[0] in ['Kaiser']:
-            w = np.kaiser(self.samples)
+            beta = float(window[1])
+            w = np.kaiser(self.samples, beta)
         elif window[0] == 'Force':
             w = np.zeros(self.samples)
             force_window = float(window[1])

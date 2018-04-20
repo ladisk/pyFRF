@@ -30,7 +30,7 @@ For a showcase see: https://github.com/openmodal/pyFRF/blob/master/Showcase%20py
 #from distutils.core import setup, Extension
 from setuptools import setup
 setup(name='pyFRF',
-      version='0.36',
+      version='0.37',
       author='Janko Slavič et al.',
       author_email='janko.slavic@fs.uni-lj.si',
       description='Frequency response function as used in structural dynamics.',

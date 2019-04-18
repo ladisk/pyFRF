@@ -28,7 +28,7 @@ Classes:
 import numpy as np
 import fft_tools
 
-__version__ = '0.38'
+__version__ = '0.39'
 _EXC_TYPES = ['f', 'a', 'v', 'd', 'e']  # force for EMA and kinematics for OMA
 _RESP_TYPES = ['a', 'v', 'd', 'e']  # acceleration, velocity, displacement, strain
 _FRF_TYPES = ['H1', 'H2', 'Hv', 'vector', 'ODS']
@@ -219,21 +219,21 @@ class FRF:
             self._data_available = True
 
     def is_data_ok(self, exc, resp, 
-                 overload_samples=3, 
+                 overflow_samples=3, 
                  double_impact_limit=1e-3, print_double_impact_ratio=False):
-        """Checks the data for overload and double-impact
+        """Checks the data for overflow and double-impact
 
         :param exc: excitation array
         :param resp: response array
-        :param overload_samples: number of samples that need to be equal to max
-                                 for overload identification
+        :param overflow_samples: number of samples that need to be equal to max
+                                 for overflow identification
         :param double_impact_limit: ratio of freq content od the double vs single hit
                       smaller number means more sensitivity
         :param print_double_impact_ratio: prints the ratio of the double PSD main lobe vse after lobe 
         :return: True if data added
         """
-        if self._is_overloaded(exc, overload_samples=overload_samples) or \
-            self._is_overloaded(resp, overload_samples=overload_samples) or \
+        if self._is_overflow(exc, overflow_samples=overflow_samples) or \
+            self._is_overflow(resp, overflow_samples=overflow_samples) or \
             self._is_double_impact(exc, limit=double_impact_limit, print_ratio=print_double_impact_ratio):
             return False
         else:
@@ -590,17 +590,17 @@ class FRF:
         else:
             return None, None
 
-    def _is_overloaded(self, data, overload_samples=3):
-        """Check data for overload
+    def _is_overflow(self, data, overflow_samples=3):
+        """Check data for overflow
     
-        :param overload_samples: number of samples that need to be equal to max
-                                 for overload identification
-        :return: overload status
+        :param overflow_samples: number of samples that need to be equal to max
+                                 for overflow identification
+        :return: overflow status
         """
         flat_shape = data.reshape(-1)
         s = np.sort(np.abs(flat_shape))[::-1]
         over = s == np.max(s)
-        if np.sum(over) >= overload_samples:
+        if np.sum(over) >= overflow_samples:
             return True
         else:
             return False

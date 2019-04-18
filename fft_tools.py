@@ -63,7 +63,8 @@ def frequency_derivation(ffts, omega, order=1):
     :param order: order of derivation
     :return: derivated array of fft data
     """
-    return multiply(ffts, np.power(1.j * omega, order))
+    with np.errstate(invalid='ignore'):    
+        return multiply(ffts, np.power(1.j * omega, order))
 
 def convert_frf(input_frfs, omega, input_frf_type, output_frf_type):
     """ Converting the frf accelerance/mobility/receptance
@@ -150,13 +151,14 @@ def correct_time_delay(fft, w, time_delay):
 
 def PSD(x, dt=1):
     """ Power spectral density
+
     :param x: time domain data
     :param dt: delta time
     :return: PSD, freq
     """
     X = np.fft.rfft(x)
     freq = np.fft.rfftfreq(len(x), d=dt)
-    X = 2 * dt * np.abs(X.conj() * X / len(x))
+    X = 2 * dt * np.abs(X.conj() * X)/ len(x)
 
     return X, freq
 

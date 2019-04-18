@@ -28,7 +28,7 @@ Classes:
 import numpy as np
 import fft_tools
 
-__version__ = '0.37'
+__version__ = '0.38'
 _EXC_TYPES = ['f', 'a', 'v', 'd', 'e']  # force for EMA and kinematics for OMA
 _RESP_TYPES = ['a', 'v', 'd', 'e']  # acceleration, velocity, displacement, strain
 _FRF_TYPES = ['H1', 'H2', 'Hv', 'vector', 'ODS']
@@ -218,13 +218,36 @@ class FRF:
             self.curr_meas += 1
             self._data_available = True
 
+    def is_data_ok(self, exc, resp, 
+                 overload_samples=3, 
+                 double_impact_limit=1e-3, print_double_impact_ratio=False):
+        """Checks the data for overload and double-impact
+
+        :param exc: excitation array
+        :param resp: response array
+        :param overload_samples: number of samples that need to be equal to max
+                                 for overload identification
+        :param double_impact_limit: ratio of freq content od the double vs single hit
+                      smaller number means more sensitivity
+        :param print_double_impact_ratio: prints the ratio of the double PSD main lobe vse after lobe 
+        :return: True if data added
+        """
+        if self._is_overloaded(exc, overload_samples=overload_samples) or \
+            self._is_overloaded(resp, overload_samples=overload_samples) or \
+            self._is_double_impact(exc, limit=double_impact_limit, print_ratio=print_double_impact_ratio):
+            return False
+        else:
+            return True
+
+
     def add_data(self, exc, resp):
         """Adds data and prepares receptance FRF
 
         :param exc: excitation array
         :param resp: response array
-        :return:
+        :return: True if data added
         """
+          
         # add time data
         self._add_to_archive(exc, resp)
         if self.copy:
@@ -247,6 +270,8 @@ class FRF:
         # measurement number counter
         self.curr_meas += 1
         self._data_available = True
+        
+        return True
 
     def get_df(self):
         """Delta frequency in Hz
@@ -408,16 +433,16 @@ class FRF:
 
         :return: H1 FRF estimator
         """
-        receptance = self.frf_norm * self.S_FX / self.S_FF;
-        return receptance
+        with np.errstate(invalid='ignore'):
+            return self.frf_norm * self.S_FX / self.S_FF
 
     def get_H2(self):
         """H2 FRF averaged estimator (receptance), preferable call via get_FRF()
 
         :return: H2 FRF estimator
         """
-        receptance = self.frf_norm * self.S_XX / self.S_XF
-        return receptance
+        with np.errstate(invalid='ignore'):
+            return self.frf_norm * self.S_XX / self.S_XF
 
     def get_Hv(self):
         """Hv FRF averaged estimator (receptance), preferable call via get_FRF()
@@ -429,9 +454,10 @@ class FRF:
         :return: Hv FRF estimator
         """
         k = 1  # ratio of the spectra of measurement noises
-        receptance = self.frf_norm * ((self.S_XX - k * self.S_FF + np.sqrt(\
-            (k * self.S_FF - self.S_XX) ** 2 + 4 * k * np.conj(self.S_FX) * self.S_FX))\
-                                      / (2 * self.S_XF))
+        with np.errstate(invalid='ignore'):
+            receptance = self.frf_norm * ((self.S_XX - k * self.S_FF + np.sqrt(\
+                (k * self.S_FF - self.S_XX) ** 2 + 4 * k * np.conj(self.S_FX) * self.S_FX))\
+                                        / (2 * self.S_XF))
         return receptance
 
     def get_FRF_vector(self):
@@ -439,7 +465,8 @@ class FRF:
 
         :return: FRF vector estimator
         """
-        return self.frf_norm * self.S_X / self.S_F
+        with np.errstate(invalid='ignore'):
+            return self.frf_norm * self.S_X / self.S_F
 
     def get_FRF(self, type='default', form='receptance'):
         """Returns the default FRF function set at init.
@@ -480,7 +507,8 @@ class FRF:
 
         :return: coherence
         """
-        return np.abs(self.get_H1() / self.get_H2())
+        with np.errstate(invalid='ignore'):
+            return np.abs(self.get_H1() / self.get_H2())
 
     def _get_frf_av(self):
         """Calculates the averaged FRF based on averaging and weighting type
@@ -561,6 +589,60 @@ class FRF:
             return self.exc_archive, self.resp_archive
         else:
             return None, None
+
+    def _is_overloaded(self, data, overload_samples=3):
+        """Check data for overload
+    
+        :param overload_samples: number of samples that need to be equal to max
+                                 for overload identification
+        :return: overload status
+        """
+        flat_shape = data.reshape(-1)
+        s = np.sort(np.abs(flat_shape))[::-1]
+        over = s == np.max(s)
+        if np.sum(over) >= overload_samples:
+            return True
+        else:
+            return False
+
+    def _is_double_impact(self, data, limit=1e-3, print_ratio=False):
+        """Check data for double-impact
+
+        See: at the end of http://scholar.lib.vt.edu/ejournals/MODAL/ijaema_v7n2/trethewey/trethewey.pdf
+        
+        :param data: one or two (time, samples) dimensional array
+        :param limit: ratio of freq content of the double vs single hit
+                      smaller number means more sensitivity
+        :param print_ratio: prints the ratio of the double PSD main lobe vse after lobe 
+        :return: double-hit status
+        """
+        if data.ndim > 2:
+            raise Exception('Number of dimensions of data should be 2 or less!')
+
+        def _double_impact_check(x):
+            skip_low_freq = 10
+            # first PSD
+            X = np.fft.rfft(x)[skip_low_freq:]  
+            X = 2 / self.sampling_freq * np.real(X * np.conj(X))/len(x)
+            # second PSD: look for oscillations in PSD
+            X2 = np.fft.rfft(X)
+            X2 = 2 / self.sampling_freq * np.real(X2 * np.conj(X2))/len(X)
+            upto = int(0.01 * len(X2))
+            max_impact = np.max(X2[:upto])
+            max_after_impact = np.max(X2[upto:])
+            if print_ratio:
+                print(f'Ratio of the double PSD main lobe vse after lobe {max_after_impact / max_impact:g}')
+            if max_after_impact / max_impact > limit:
+                return True
+            else:
+                return False
+
+        if data.ndim == 2:
+            double_hit = [_double_impact_check(d) for d in data.T]
+            return double_hit
+        else:
+            double_hit = _double_impact_check(data)
+            return double_hit
 
 
 if __name__ == '__main__':

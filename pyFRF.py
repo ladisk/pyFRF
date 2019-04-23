@@ -377,7 +377,7 @@ class FRF:
         self.Resp = np.fft.rfft(self.resp, self.fft_len)
 
         if self.resp_type != 'e':  # if not strain
-            # convert H1 to receptance
+            # response to displacement
             self.Resp = fft_tools.convert_frf(self.Resp, self.w_axis, input_frf_type=self.resp_type,
                                               output_frf_type='d')
 

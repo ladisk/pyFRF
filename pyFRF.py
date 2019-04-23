@@ -28,7 +28,7 @@ Classes:
 import numpy as np
 import fft_tools
 
-__version__ = '0.39'
+__version__ = '0.40'
 _EXC_TYPES = ['f', 'a', 'v', 'd', 'e']  # force for EMA and kinematics for OMA
 _RESP_TYPES = ['a', 'v', 'd', 'e']  # acceleration, velocity, displacement, strain
 _FRF_TYPES = ['H1', 'H2', 'Hv', 'vector', 'ODS']
@@ -293,6 +293,16 @@ class FRF:
 
         return np.fft.rfftfreq(self.fft_len, 1. / self.sampling_freq)
 
+    def get_w_axis(self):
+        """
+
+        :return: frequency vector in rad/s
+        """
+        if not self._data_available:
+            raise Exception('No data has been added yet!')
+
+        return 2*np.pi * self.get_f_axis()
+
     def get_t_axis(self):
         """Returns time axis.
 
@@ -497,9 +507,9 @@ class FRF:
                             % (form, _FRF_FORM))
 
         if form=='accelerance':
-            return fft_tools.frequency_derivation(receptance, self.get_f_axis(), order=2)
+            return fft_tools.frequency_derivation(receptance, self.get_w_axis(), order=2)
         if form=='mobility':
-            return fft_tools.frequency_derivation(receptance, self.get_f_axis(), order=1)
+            return fft_tools.frequency_derivation(receptance, self.get_w_axis(), order=1)
         return receptance
 
     def get_coherence(self):

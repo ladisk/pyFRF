@@ -170,7 +170,7 @@ class FRF:
             raise Exception('wrong response window type given %s (can be %s)'
                             % (self.resp_window, _WINDOWS))
 
-        self.curr_meas = np.int(0)
+        self.curr_meas = int(0)
 
         if exc is not None and resp is not None:
             self.add_data(exc, resp)

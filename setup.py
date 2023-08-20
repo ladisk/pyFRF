@@ -5,7 +5,7 @@ pyFRF
 Frequency response function as used in structural dynamics.
 -----------------------------------------------------------
 
-For a showcase see: https://github.com/ladisk/pyFRF/blob/master/Showcase%20pyFRF.ipynb
+For a showcase see: https://github.com/ladisk/pyFRF/blob/main/Showcase%20pyFRF.ipynb
 """
 
 #from distutils.core import setup, Extension

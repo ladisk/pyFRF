@@ -3,3 +3,4 @@ numpy
 py
 pytest
 lvm_read
+pyExSi

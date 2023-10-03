@@ -4,5 +4,3 @@ nbsphinx
 sphinx-rtd-theme
 jupyter
 nbsphinx_link
-
-git+https://github.com/ladisk/pyFRF.git

@@ -4,3 +4,9 @@ py
 pytest
 lvm_read
 pyExSi
+scipy
+
+nbsphinx
+sphinx-rtd-theme
+ipython
+nbsphinx_link

@@ -10,7 +10,7 @@ import numpy as np
 import scipy
 import warnings
 
-__version__ = '1.0'
+__version__ = '1.1'
 _EXC_TYPES = ['f', 'a', 'v', 'd', 'e']  # force for EMA and kinematics for OMA
 _RESP_TYPES = ['a', 'v', 'd', 'e']  # acceleration, velocity, displacement, strain
 _FRF_TYPES = ['H1', 'H2', 'Hv', 'ODS']

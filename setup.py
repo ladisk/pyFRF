@@ -34,7 +34,7 @@ def parse_requirements(filename):
 
 requirements = parse_requirements('requirements.txt')
 
-setup(name='pyuff',
+setup(name='pyFRF',
       version=version,
       author='Janko Slavič, Luka Novak, Martin Česnik, et al.',
       author_email='janko.slavic@fs.uni-lj.si',

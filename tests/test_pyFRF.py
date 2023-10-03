@@ -12,9 +12,6 @@ sys.path.insert(0, myPath + '/../')
 
 import pyFRF
 
-
-
-
 # function used to acquire true systems FRF:
 def get_true_FRF():
     ndof = 3
@@ -441,10 +438,6 @@ def test_analytical_matrix_inverse():
     # test:
     np.testing.assert_allclose(test_object._analytical_matrix_inverse(A), 
                                    np.linalg.inv(A))
-
-
-
-
 
 if __name__ == '__mains__':
     np.testing.run_module_suite()

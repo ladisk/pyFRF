@@ -3,7 +3,7 @@ pyFRF
 
 Frequency response function as used in structural dynamics.
 -----------------------------------------------------------
-For more information check out the showcase examples and see documentation: LINK
+For more information check out the showcase examples and see documentation_.
 
 Basic ``pyFRF`` usage:
 ---------------------
@@ -54,6 +54,7 @@ We can also directly get the requested FRF via other methods: ``get_H1()``, ``ge
     Hv = a.get_Hv()
     ods_frf = a.get_ods_frf()
 
+.. _documentation: https://pyfrf.readthedocs.io/en/latest/
 
 |pytest|
 

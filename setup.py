@@ -18,7 +18,7 @@ with open(init_file, 'r') as f:
             'Cannot find __version__ in {}'.format(init_file))
 
 
-with open(os.path.join(base_path, 'README.rst'), encoding='utf-8') as f:
+with open(os.path.join(base_path, 'readme.rst'), encoding='utf-8') as f:
     long_description = f.read()
 
 

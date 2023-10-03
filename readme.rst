@@ -13,7 +13,7 @@ Make an instance of ``FRF`` class:
 
 .. code:: python
 
-    a = pyFRF2.FRF(
+    a = pyFRF.FRF(
         sampling_freq,
         exc=None,
         resp=None,

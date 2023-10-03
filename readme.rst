@@ -1,15 +1,15 @@
 pyFRF
-======
+=====
 
 Frequency response function as used in structural dynamics.
 -----------------------------------------------------------
 For more information check out the showcase examples and see documentation_.
 
 Basic ``pyFRF`` usage:
----------------------
+----------------------
 
 Make an instance of ``FRF`` class:
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code:: python
 

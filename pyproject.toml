@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pyFRF"
+version = "1.1"
+authors = [{name = "Janko Slavič, Luka Novak, Martin Česnik, et al.", email = "janko.slavic@fs.uni-lj.si"}]
+maintainers = [{name = "Janko Slavič, Luka Novak, Martin Česnik, et al.", email = "janko.slavic@fs.uni-lj.si"}]
+license = "MIT"
+description = "Frequency response function as used in structural dynamics."
+readme = "readme.rst"
+keywords = ["FRF", "MIMO", "SIMO", "ODS"]
+requires-python = ">=3.10"
+
+dependencies = [
+    "colorama",
+    "py",
+    "lvm_read",
+    "pyExSi",
+    "matplotlib",
+    "numpy>=1.11.0",
+    "scipy>=1.2.0",
+]
+
+classifiers = [
+    'Development Status :: 5 - Production/Stable',
+    'Intended Audience :: Developers',
+    'Topic :: Scientific/Engineering',
+    'Programming Language :: Python :: 3.10',
+    "License :: OSI Approved :: MIT License",
+]
+
+[project.optional-dependencies]
+dev = [
+    "sphinx",
+    "twine",
+    "wheel",
+    "pytest",
+    "sphinx-rtd-theme",
+    "nbsphinx",
+    "nbsphinx_link",
+    "jupyter",
+    "sphinx-book-theme",
+]
+
+[project.urls]
+homepage = "https://github.com/ladisk/pyFRF"
+documentation = "https://pyfrf.readthedocs.io/en/latest/"
+source = "https://github.com/ladisk/pyFRF"

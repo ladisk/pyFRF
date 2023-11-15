@@ -4,24 +4,8 @@ on:
     tags:
       - 'v*'
 jobs:
-  release:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Create GitHub Release
-        id: create_release
-        uses: actions/create-release@v1
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
-
   publish:
     runs-on: ubuntu-latest
-    needs: release
     steps:
       - name: Checkout code
         uses: actions/checkout@v2

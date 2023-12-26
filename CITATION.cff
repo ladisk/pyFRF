@@ -1,0 +1,40 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: pyFRF: Frequency response function as used in structural dynamics
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Janko
+    family-names: Slavič
+    email: janko.slavic@fs.uni-lj.si
+    affiliation: >-
+      University of Ljubljana, Faculty of Mechanical
+      Engineering
+    orcid: 'https://orcid.org/0000-0002-5982-8377'
+  - given-names: Martin
+    family-names: Česnik
+    email: martin.cesnik@fs.uni-lj.si
+    affiliation: >-
+      University of Ljubljana, Faculty of Mechanical
+      Engineering
+    orcid: 'https://orcid.org/0000-0003-2807-5031'
+  - given-names: Klemen
+    family-names: Zaletelj
+    email: klemen.zaletelj@fs.uni-lj.si
+    affiliation: >-
+      University of Ljubljana, Faculty of Mechanical
+      Engineering
+    orcid: 'https://orcid.org/0000-0001-7314-3916'
+  - given-names: Luka
+    family-names: Novak
+    email: luka.novak@fs.uni-lj.si
+    affiliation: >-
+      University of Ljubljana, Faculty of Mechanical
+      Engineering
+identifiers:
+  - type: url
+    value: 'https://github.com/ladisk/pyFRF'

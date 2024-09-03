@@ -638,19 +638,15 @@ class FRF:
         :rtype: ndarray
         """
         with np.errstate(invalid='ignore'):
-            freq_len = np.fft.rfftfreq(self.fft_len, 1. / self.sampling_freq).shape[0]
-            H1 = np.zeros((self.resp.shape[1], self.exc.shape[1], freq_len), dtype="complex128")
-            
+            S_FX = self.S_FX.transpose(1, 0, 2)
+            S_FF = self.S_FF
             if self.exc.shape[1] == 1:  # SISO, SIMO
-                #print("single input")
-                H1 = self.frf_norm * self.S_XF / self.S_FF
+                H1 = self.frf_norm * S_FX / S_FF
             else:  # MISO, MIMO
-                if (self.S_FF[:,:,0].shape == (2,2)) or (self.S_FF[:,:,0].shape == (3,3)):
-                    for i in range(freq_len):
-                        H1[:,:,i] = self.frf_norm * (self.S_XF[:,:,i] @ self._analytical_matrix_inverse(self.S_FF[:,:,i]))
-                else:
-                    for i in range(freq_len):
-                        H1[:,:,i] = self.frf_norm * (self.S_XF[:,:,i] @ np.linalg.inv(self.S_FF[:,:,i]))
+                freq_len = np.fft.rfftfreq(self.fft_len, 1. / self.sampling_freq).shape[0]
+                H1 = np.zeros((self.resp.shape[1], self.exc.shape[1], freq_len), dtype="complex128")
+                for i in range(freq_len):
+                    H1[:,:,i] = self.frf_norm * (S_FX[:,:,i] @ self._analytical_matrix_inverse(S_FF[:,:,i]))
             return  (H1 * self.frf_conversion) / self._correct_time_delay()
         
     # OK:    
@@ -662,24 +658,17 @@ class FRF:
         :rtype: ndarray
         """
         with np.errstate(invalid='ignore'):
-            freq_len = np.fft.rfftfreq(self.fft_len, 1. / self.sampling_freq).shape[0]
-            H2 = np.zeros((self.resp.shape[1], self.exc.shape[1], freq_len), dtype="complex128")
-            
+            S_XF = self.S_XF
+            S_XX = self.S_XX
             if self.exc.shape[1] == 1:  # SISO, SIMO
                 #print("single input")
                 for i in range(self.resp.shape[1]):
-                    H2[i,:,:] = self.frf_norm * (self.S_XX[i,i,:] / self.S_FX[:,i,:])
+                    H2 = self.frf_norm * S_XX / S_XF
             else:
-                if (self.S_FX[:,:,0].shape == (2,2)) or (self.S_FX[:,:,0].shape == (3,3)):
-                    for i in range(freq_len):
-                        H2[:,:,i] = self.frf_norm * (self.S_XX[:,:,i] @ self._analytical_matrix_inverse(self.S_FX[:,:,i]))
-                else:
-                    if (self.S_FX[:,:,0].shape[0] == self.S_FX[:,:,0].shape[1]):
-                        for i in range(freq_len):
-                            H2[:,:,i] = self.frf_norm * (self.S_XX[:,:,i] @ np.linalg.inv(self.S_FX[:,:,i]))
-                    else:
-                        for i in range(freq_len):
-                            H2[:,:,i] = self.frf_norm * (self.S_XX[:,:,i] @ np.linalg.pinv(self.S_FX[:,:,i]))
+                freq_len = np.fft.rfftfreq(self.fft_len, 1. / self.sampling_freq).shape[0]
+                H2 = np.zeros((self.resp.shape[1], self.exc.shape[1], freq_len), dtype="complex128")
+                for i in range(freq_len):
+                    H2[:,:,i] = self.frf_norm * (S_XX[:,:,i] @ self._analytical_matrix_inverse(S_XF[:,:,i]))
             return (H2 * self.frf_conversion) / self._correct_time_delay()
         
     def get_Hv(self):
@@ -983,6 +972,11 @@ class FRF:
             ]
 
             return np.array(inverse_matrix)
+        
+        elif matrix.shape[0] == matrix.shape[1]:
+            return np.linalg.inv(matrix)
+        else:
+            return np.linalg.pinv(matrix)
         
 if __name__ == '__main__':
     pass

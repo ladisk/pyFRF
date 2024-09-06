@@ -46,6 +46,7 @@ class FRF:
                  archive_time_data=False,
                  frf_type='H1',
                  copy=True,
+                 analytical_inverse=False,
                  **kwargs):
         """
         Initiates the Data class:
@@ -95,6 +96,11 @@ class FRF:
         :param copy: If true the excitation and response arrays are copied 
             (if data is not copied the applied window affects the source arrays).
         :type copy: bool
+        :param analytical_inverse: If true, use the analytical formula for inversion of small 
+            (2x2, 3x3) matrices. Otherwise, the generalized peseudoinverse (np.linalg.pinv) is used. 
+            The analytical inverse is faster when 3 or less excitation DOFs are used, but might be
+            less stable for ill-conditioned spectral matrices. Defaults to False.
+        :type analytical_inverse: bool
         """
         # previous pyFRF kwargs:
         if ("exc_window" in kwargs) or ("resp_window" in kwargs):
@@ -159,6 +165,7 @@ class FRF:
         
         self.frf_type = frf_type
         self.copy = copy
+        self.analytical_inverse = analytical_inverse
 
         # ini
         self.exc = np.array([])
@@ -634,6 +641,11 @@ class FRF:
         """
         Get H1 FRF averaged estimator (receptance), preferable call via get_FRF().
 
+        For clarification on the Multiple input formulation, see [1] pages 116-118.
+
+        Literature:
+            [1] Maia and Silva: Theoretical and Experimental Modal Analysis. Research Studies Press, 1997.
+
         :return: H1 FRF estimator matrix (ndarray) of shape (response DOF, excitation DOF, freqency points).
         :rtype: ndarray
         """
@@ -646,13 +658,19 @@ class FRF:
                 freq_len = np.fft.rfftfreq(self.fft_len, 1. / self.sampling_freq).shape[0]
                 H1 = np.zeros((self.resp.shape[1], self.exc.shape[1], freq_len), dtype="complex128")
                 for i in range(freq_len):
-                    H1[:,:,i] = self.frf_norm * (S_FX[:,:,i] @ self._analytical_matrix_inverse(S_FF[:,:,i]))
+                    H1[:, :, i] = self.frf_norm * (self._matrix_inverse(self.S_FF[:, :, i]) @ self.S_FX[:, :, i]).T 
+                    
             return  (H1 * self.frf_conversion) / self._correct_time_delay()
         
     # OK:    
     def get_H2(self):
         """
         H2 FRF averaged estimator (receptance), preferable call via get_FRF().
+        
+        For clarification on the Multiple input formulation, see [1] pages 116-118.
+
+        Literature:
+            [1] Maia and Silva: Theoretical and Experimental Modal Analysis. Research Studies Press, 1997.
 
         :return: H2 FRF estimator matrix (ndarray) of shape (response DOF, excitation DOF, freqency points).
         :rtype: ndarray
@@ -661,14 +679,14 @@ class FRF:
             S_XF = self.S_XF
             S_XX = self.S_XX
             if self.exc.shape[1] == 1:  # SISO, SIMO
-                #print("single input")
+                S_XX = np.diagonal(S_XX).T[:, None, :] # diagonal elements of S_XX, reshaped to (resp_DOF, 1, freq)
                 for i in range(self.resp.shape[1]):
-                    H2 = self.frf_norm * S_XX / S_XF
+                    H2 = self.frf_norm * S_XX / S_XF 
             else:
                 freq_len = np.fft.rfftfreq(self.fft_len, 1. / self.sampling_freq).shape[0]
                 H2 = np.zeros((self.resp.shape[1], self.exc.shape[1], freq_len), dtype="complex128")
                 for i in range(freq_len):
-                    H2[:,:,i] = self.frf_norm * (S_XX[:,:,i] @ self._analytical_matrix_inverse(S_XF[:,:,i]))
+                    H2[:, :, i] = self.frf_norm * (self._matrix_inverse(self.S_XF[:, :, i]) @ self.S_XX[:, :, i]).T 
             return (H2 * self.frf_conversion) / self._correct_time_delay()
         
     def get_Hv(self):
@@ -755,7 +773,7 @@ class FRF:
                 for i in range(self.resp.shape[1]):
                     if (self.S_FF[:,:,0].shape == (2,2)) or (self.S_FF[:,:,0].shape == (3,3)):
                         for j in range(freq_len):
-                            coh[i,j] = ((self.S_XF[i,:,j] @ self._analytical_matrix_inverse(self.S_FF[:,:,j])) @ self.S_FX[:,i,j])
+                            coh[i,j] = ((self.S_XF[i,:,j] @ self._matrix_inverse(self.S_FF[:,:,j])) @ self.S_FX[:,i,j])
                     else:
                         for j in range(freq_len):
                             coh[i,j] = ((self.S_XF[i,:,j] @ np.linalg.inv(self.S_FF[:,:,j])) @ self.S_FX[:,i,j])
@@ -935,48 +953,63 @@ class FRF:
         """
         return (np.exp(1j * self.get_w_axis() * self.resp_delay))
 
-    def _analytical_matrix_inverse(self, matrix):
+    def _matrix_inverse(self, matrix):
         """
-        Calculate faster analytical inverse of 2x2 or 3x3 matrix.
-
+        Matrix inverse computation.
+        If self.analytical_inverse is True, it attempts to calculate faster analytical inverse of 
+        2x2 or 3x3 matrices. For larger square matrices, it uses numpy.linalg.inv. For singular
+        or non-square matrices, or if self.analytical inverse is False, the generalized pseudoinverse
+        is computed, using numpy.linalg.pinv.
+    
         :param matrix: Array of shape (2x2) or (3x3).
         :return: Matrix inverse array.
         :rtype: ndarray
         """
-        if matrix.shape == (2,2):
-            a, b, c, d = matrix[0][0], matrix[0][1], matrix[1][0], matrix[1][1]
-            det = a * d - b * c
-            
-            if det == 0:
-                raise ValueError("Singular matrix.")
-            
-            inverse_matrix = [[d / det, -b / det],
-                            [-c / det, a / det]]
-            
-            return np.array(inverse_matrix)
-        
-        if matrix.shape == (3,3):
-            a, b, c = matrix[0]
-            d, e, f = matrix[1]
-            g, h, i = matrix[2]
-            
-            det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g)
-            
-            if det == 0:
-                raise ValueError("Singular matrix.")
-            
-            inverse_matrix = [
-                [(e * i - f * h) / det, (c * h - b * i) / det, (b * f - c * e) / det],
-                [(f * g - d * i) / det, (a * i - c * g) / det, (c * d - a * f) / det],
-                [(d * h - e * g) / det, (g * b - a * h) / det, (a * e - b * d) / det]
-            ]
+        non_square = matrix.shape[0] != matrix.shape[1]
 
-            return np.array(inverse_matrix)
-        
-        elif matrix.shape[0] == matrix.shape[1]:
-            return np.linalg.inv(matrix)
-        else:
+        if not self.analytical_inverse or non_square:
             return np.linalg.pinv(matrix)
+        
+        # square matrix, self.analytical_inverse is True
+        else:
+            try:
+                if matrix.shape == (2,2):
+                    a, b, c, d = matrix[0][0], matrix[0][1], matrix[1][0], matrix[1][1]
+                    det = a * d - b * c
+                    
+                    if det == 0:
+                        raise np.linalg.LinAlgError("Singular matrix.")
+                    
+                    inverse_matrix = [[d / det, -b / det],
+                                    [-c / det, a / det]]
+                    
+                    return np.array(inverse_matrix)
+                
+                elif matrix.shape == (3,3):
+                    a, b, c = matrix[0]
+                    d, e, f = matrix[1]
+                    g, h, i = matrix[2]
+                    
+                    det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g)
+                    
+                    if det == 0:
+                        raise np.linalg.LinAlgError("Singular matrix.")
+                    
+                    inverse_matrix = [
+                        [(e * i - f * h) / det, (c * h - b * i) / det, (b * f - c * e) / det],
+                        [(f * g - d * i) / det, (a * i - c * g) / det, (c * d - a * f) / det],
+                        [(d * h - e * g) / det, (g * b - a * h) / det, (a * e - b * d) / det]
+                    ]
+
+                    return np.array(inverse_matrix)
+                
+                else:
+                    # For square matrices larger than 3x3, use numpy.linalg.inv
+                    return np.linalg.pinv(matrix)
+                
+            except np.linalg.LinAlgError:
+                # For singular square matrices, try using numpy.linalg.pinv
+                return np.linalg.pinv(matrix)
         
 if __name__ == '__main__':
     pass

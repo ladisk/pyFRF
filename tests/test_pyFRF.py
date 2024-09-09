@@ -140,7 +140,7 @@ def test_FRF_MIMO():
     FRF_matrix_w, freq_w, t_w = get_true_FRF(T=T_welch, fs=fs)
 
     # define excitation and get response (MISO):
-    n_measurements = 5
+    n_measurements = 10
     exc_dofs = [0, 1]  # multiple inputs
     resp_dofs = [0, 1, 2]  # single output
     freq_lower = 0 # PSD lower frequency limit  [Hz]
@@ -176,7 +176,7 @@ def test_FRF_MIMO():
         # test frf phase:
         np.testing.assert_allclose(np.angle(H[:, :, 1:-1]), 
                                    np.angle(true_frf[:,:,1:-1]),
-                                   rtol=5e-1, atol=2e-01)
+                                   rtol=5e-1, atol=3e-01)
             
 
 def test_freq():

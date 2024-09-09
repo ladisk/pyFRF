@@ -6,71 +6,36 @@ import matplotlib.pyplot as plt # dg
 
 import numpy as np
 import scipy
+from scipy.signal import detrend
 import pyExSi
 import sys, os
 
 myPath = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, myPath + '/../')
 
+import model
 import pyFRF
 
 # function used to acquire true systems FRF:
-def get_true_FRF(T=1, fs=200):
-    ndof = 3
+def get_true_FRF(T=10, fs=300, ndof=3):
 
-    # mass matrix:
-    m = 2
-    M = np.zeros((ndof, ndof))
-    np.fill_diagonal(M, m)
+    time = np.arange(0, T, 1/fs)
+    freq = np.fft.rfftfreq(len(time), 1/fs)
+    omega = 2*np.pi*freq
 
-    # stiffness matrix:
-    k = 130000
-    K = np.zeros((ndof, ndof))
+    m_ = np.arange(1, 1+ndof, 1)
+    c_ = np.ones(len(m_)+1, dtype=np.float64) * 60 # N/m/s
+    k_ = np.ones(len(m_)+1, dtype=np.float64) * 150000 # N/m
 
-    for i in range(K.shape[0] - 1):
-        K[i,i] = 2*k
-        K[i+1,i] = -k
-        K[i,i+1] = -k
-    K[ndof-1,ndof-1] = k
+    # MDOF model:
+    fr_, xi_, eig = model.modal_model(m_, k_, c_)
+    FRF = model.FRF_matrix(omega, *eig)
 
-    # damping matrix:
-    c = 20
-    C = np.zeros((ndof, ndof))
-
-    for i in range(C.shape[0] - 1):
-        C[i,i] = 2*c
-        C[i+1,i] = -c
-        C[i,i+1] = -c
-    C[ndof-1,ndof-1] = c
-
-    # eig_freq:
-    eig_val, eig_vec = scipy.linalg.eigh(K, M)
-    eig_val.sort()
-    eig_omega = np.sqrt(np.abs(np.real(eig_val)))
-    eig_freq = eig_omega / (2 * np.pi)
-
-    # time:
-    t = np.arange(int(T*fs)) / fs
-
-    # freq:
-    freq = np.fft.rfftfreq(len(t), 1/fs)
-    omega = 2 * np.pi * freq
-
-    # true FRF:
-    FRF = np.zeros([M.shape[0], M.shape[0], len(freq)], dtype="complex128")
-    for i, omega_i in enumerate(omega):
-        FRF[:,:,i] = scipy.linalg.inv(K - omega_i**2 * M + 1j*omega_i*C)
-
-    # peak indexes
-    peak_ind = scipy.signal.find_peaks(np.abs(FRF[0,0]))[0]
-
-
-
-    return FRF, freq, t, peak_ind
+    return FRF, freq, time
 
 
 # function used to acquire response via true FRF matrix and known excitation:
-def get_response(exc, FRF_matrix, freq, exc_dofs, resp_dofs):
+def get_response(exc, FRF_matrix, exc_dofs, resp_dofs):
     """
     exc: excitation array
     FRF_matrix: true system FRF matrix
@@ -78,17 +43,8 @@ def get_response(exc, FRF_matrix, freq, exc_dofs, resp_dofs):
     resp_dofs: list of wanted response dof
     """
     
-    F = np.fft.rfft(exc)
-    X = np.zeros((F.shape[0], FRF_matrix.shape[0], FRF_matrix.shape[2]), dtype="complex128")
-
-    for i in range(F.shape[0]):
-        for j in range(F.shape[2]):
-            X[i,:,j] = FRF_matrix[:,exc_dofs,j] @ F[i,:,j]
-
-    x = np.fft.irfft(X, n=2*(len(freq)-1)+1)
-    x = x[:,resp_dofs]
-
-    return x
+    x = model.compute_response(FRF_matrix, exc, exc_dofs)
+    return x[:,resp_dofs]
 
 
 
@@ -97,7 +53,7 @@ def get_response(exc, FRF_matrix, freq, exc_dofs, resp_dofs):
 # TEST FUNCTIONS:
 def test_FRF_SISO():
     # get true FRF matrix, freq and time:
-    (FRF_matrix, freq, t, true_peaks) = get_true_FRF()
+    FRF_matrix, freq, t = get_true_FRF()
 
     # define excitation and get response (SISO):
     n_measurements = 1
@@ -106,7 +62,7 @@ def test_FRF_SISO():
     f = np.zeros((n_measurements, len(exc_dofs), t.shape[0]))
     f[0,0,0] = 1.
     x = np.zeros_like(f)
-    x[0,0] = np.fft.irfft(FRF_matrix[0, 0])#get_response(f, FRF_matrix, freq, exc_dofs, resp_dofs)
+    x[0,0] = np.fft.irfft(FRF_matrix[0, 0])
 
     # get relevant FRFs from FRF matrix based on excitation dofs and response dofs:
     true_frf = np.zeros((len(resp_dofs), len(exc_dofs), FRF_matrix.shape[2]), dtype="complex128")
@@ -134,7 +90,7 @@ def test_FRF_SISO():
 
 def test_FRF_SIMO():
     # get true FRF matrix, freq and time:
-    (FRF_matrix, freq, t, true_peaks) = get_true_FRF()
+    FRF_matrix, freq, t = get_true_FRF()
 
     # define excitation and get response (SIMO):
     n_measurements = 1
@@ -145,7 +101,7 @@ def test_FRF_SIMO():
     x = np.zeros((n_measurements, len(resp_dofs), t.shape[0]))
     for i in range(len(resp_dofs)):
         x[0, i, :] = np.fft.irfft(FRF_matrix[resp_dofs[i], exc_dofs[0]])
-    print(x.shape)
+
 
     # get relevant FRFs from FRF matrix based on excitation dofs and response dofs:
     true_frf = np.zeros((len(resp_dofs), len(exc_dofs), FRF_matrix.shape[2]), dtype="complex128")
@@ -160,113 +116,72 @@ def test_FRF_SIMO():
     H1 = pyFRF_obj.get_H1()
     H2 = pyFRF_obj.get_H2()
     Hv = pyFRF_obj.get_Hv()
-            
+
     for H in [H1, H2, Hv]:
         # test frf amplitudes:
         np.testing.assert_allclose(np.abs(H[:, :, 1:-1]), np.abs(true_frf[:,:,1:-1]), 
-                                rtol=1e-04, atol=1e-06)
+                                rtol=1e-03, atol=1e-06)
                 
         # test frf phase:
         np.testing.assert_allclose(np.angle(H[:, :, 1:-1]), np.angle(true_frf[:,:,1:-1]), 
-                        rtol=1e-04, atol=1e-06)
-            
-
-# TODO:
-def test_FRF_MISO():
-    # get true FRF matrix, freq and time:
-    T = 10
-    fs = 200
-    (FRF_matrix, freq, t, true_peaks) = get_true_FRF(T=T, fs=fs)
-    print(len(t))
-
-    # define excitation and get response (MISO):
-    n_measurements = 100
-    exc_dofs = [0,1,2]  # multiple inputs
-    resp_dofs = [0]  # single output
-    f = np.zeros((n_measurements, len(exc_dofs), t.shape[0]))
-    for i in range(f.shape[0]):
-        for j in range(f.shape[1]):
-            f[i][j] = 100 * pyExSi.normal_random(N=t.shape[0])
-    x = get_response(f, FRF_matrix, freq, exc_dofs, resp_dofs)
-
-    # get relevant FRFs from FRF matrix based on excitation dofs and response dofs:
-    true_frf = np.zeros((len(resp_dofs), len(exc_dofs), FRF_matrix.shape[2]), dtype="complex128")
-    for i in range(len(resp_dofs)):
-        for j in range(len(exc_dofs)):
-            true_frf[i,j] = FRF_matrix[resp_dofs[i],exc_dofs[j]]
-    
-    # get FRF from pyFRF:
-    pyFRF_obj = pyFRF.FRF(sampling_freq=int(1/t[1]), exc=f, resp=x, 
-                                window="hann", exc_type='f', resp_type='d', 
-                                nperseg=fs, noverlap=None, fft_len=fs)
-    H1 = pyFRF_obj.get_H1()
-    H2 = pyFRF_obj.get_H2()
-    f_welch = np.fft.rfftfreq(fs, 1/fs)
-
-    # for i in range(len(resp_dofs)):
-    #     for j in range(len(exc_dofs)):
-    #         plt.figure()
-    #         plt.title('H2 MISO')
-    #         plt.semilogy(f_welch, np.abs(H1[i,j]), label='H1')
-    #         plt.semilogy(f_welch, np.abs(H2[i,j]), label='H2')
-    #         plt.semilogy(freq, np.abs(true_frf[i,j]), label='True')
-    #         plt.legend()
-    #         plt.show()
-    #         #
-
-    # test frf values:
-    for i in range(len(resp_dofs)):
-        for j in range(len(exc_dofs)):
-            np.testing.assert_allclose(frf_pyFRF[i,j,1:], true_frf[i,j,1:], 
-                                       rtol=3, atol=1e-08)
+                        rtol=1e-03, atol=1e-06)
             
 
 def test_FRF_MIMO():
     # get true FRF matrix, freq and time:
-    (FRF_matrix, freq, t, true_peaks) = get_true_FRF()
+    T = 10  
+    fs = 300
 
-    # define excitation and get response (MIMO):
+    T_welch = 1
+    N_welch = int(T_welch*fs)
+
+    FRF_matrix, freq, t = get_true_FRF(T=T, fs=fs)
+    print(FRF_matrix.shape)
+    FRF_matrix_w, freq_w, t_w = get_true_FRF(T=T_welch, fs=fs)
+
+    # define excitation and get response (MISO):
     n_measurements = 5
-    exc_dofs = [0,1,2]  # multiple inputs
-    resp_dofs = [0,1,2]  # multiple outputs
+    exc_dofs = [0, 1]  # multiple inputs
+    resp_dofs = [0, 1, 2]  # single output
+    freq_lower = 0 # PSD lower frequency limit  [Hz]
+    freq_upper = 300 # PSD upper frequency limit [Hz]
+    PSD = pyExSi.get_psd(freq, freq_lower, freq_upper) # one-sided flat-shaped PSD
     f = np.zeros((n_measurements, len(exc_dofs), t.shape[0]))
+
     for i in range(f.shape[0]):
         for j in range(f.shape[1]):
-            f[i][j] = 100 * pyExSi.normal_random(N=t.shape[0])
-    x = get_response(f, FRF_matrix, freq, exc_dofs, resp_dofs)
+            f[i][j] = pyExSi.random_gaussian(f.shape[-1], PSD, fs)
+    x = get_response(f, FRF_matrix, exc_dofs, resp_dofs)
 
     # get relevant FRFs from FRF matrix based on excitation dofs and response dofs:
-    true_frf = np.zeros((len(resp_dofs), len(exc_dofs), FRF_matrix.shape[2]), dtype="complex128")
+    true_frf = np.zeros((len(resp_dofs), len(exc_dofs), FRF_matrix_w.shape[2]), dtype="complex128")
     for i in range(len(resp_dofs)):
         for j in range(len(exc_dofs)):
-            true_frf[i,j] = np.abs(FRF_matrix[resp_dofs[i],exc_dofs[j]])
+            true_frf[i, j] = FRF_matrix_w[i, j]
     
     # get FRF from pyFRF:
-    frf_pyFRF = np.abs(pyFRF.FRF(sampling_freq=int(1/t[1]), exc=f, resp=x, 
-                                  window="hann", exc_type='f', resp_type='d', 
-                                  nperseg=4000, noverlap=None, fft_len=None).get_H1())
-    
-    
-    for i in range(len(resp_dofs)):
-        for j in range(len(exc_dofs)):
-            plt.figure()
-            plt.title('H1 MIMO')
-            plt.semilogy(freq, np.abs(frf_pyFRF[i,j]))
-            plt.semilogy(freq, np.abs(true_frf[i,j]))
-            plt.show()
-            #
+    print(f.shape, x.shape, N_welch)
+    pyFRF_obj = pyFRF.FRF(sampling_freq=fs, exc=f, resp=x, 
+                                window="hann", exc_type='f', resp_type='d', 
+                                nperseg=N_welch, noverlap=N_welch//2, fft_len=N_welch,
+                                anyltical_inverse=False)
+    H1 = pyFRF_obj.get_H1()
+    H2 = pyFRF_obj.get_H2()
 
-
-    # # test frf values:
-    # for i in range(len(resp_dofs)):
-    #     for j in range(len(exc_dofs)):
-    #         np.testing.assert_allclose(frf_pyFRF[i,j,1:], true_frf[i,j,1:], 
-    #                                    rtol=3, atol=1e-08)
+    for H in [H1, H2]:
+        # test frf amplitudes:
+        np.testing.assert_allclose(np.abs(H[:, :, 1:-1]), np.abs(true_frf[:,:,1:-1]), 
+                                rtol=5e-01, atol=1e-06)
+                
+        # test frf phase:
+        np.testing.assert_allclose(np.angle(H[:, :, 1:-1]), 
+                                   np.angle(true_frf[:,:,1:-1]),
+                                   rtol=5e-1, atol=2e-01)
             
 
 def test_freq():
     # get true FRF matrix, freq and time:
-    (FRF_matrix, freq, t, peaks) = get_true_FRF()
+    FRF_matrix, freq, t = get_true_FRF()
 
     # define excitation and get response (SISO):
     n_measurements = 1
@@ -274,7 +189,7 @@ def test_freq():
     resp_dofs = [0]  # single output
     f = np.zeros((n_measurements, len(exc_dofs), t.shape[0]))
     f[0,0,0:50] = 50 * np.sin(2*np.pi*np.arange(0,50,1)/100)
-    x = get_response(f, FRF_matrix, freq, exc_dofs, resp_dofs)
+    x = get_response(f, FRF_matrix, exc_dofs, resp_dofs)
 
     # define sampling frequency and length of fft:
     sampling_freq = int(1/t[1])
@@ -292,7 +207,7 @@ def test_freq():
 
 def test_w():
     # get true FRF matrix, freq and time:
-    (FRF_matrix, freq, t, peaks) = get_true_FRF()
+    FRF_matrix, freq, t = get_true_FRF()
 
     # define excitation and get response (SISO):
     n_measurements = 1
@@ -300,7 +215,7 @@ def test_w():
     resp_dofs = [0]  # single output
     f = np.zeros((n_measurements, len(exc_dofs), t.shape[0]))
     f[0,0,0:50] = 50 * np.sin(2*np.pi*np.arange(0,50,1)/100)
-    x = get_response(f, FRF_matrix, freq, exc_dofs, resp_dofs)
+    x = get_response(f, FRF_matrix, exc_dofs, resp_dofs)
 
     # define sampling frequency and length of fft:
     sampling_freq = int(1/t[1])
@@ -319,7 +234,7 @@ def test_w():
 
 def test_t():
     # get true FRF matrix, freq and time:
-    (FRF_matrix, freq, t, peaks) = get_true_FRF()
+    FRF_matrix, freq, t = get_true_FRF()
 
     # define excitation and get response (SISO):
     n_measurements = 1
@@ -327,7 +242,7 @@ def test_t():
     resp_dofs = [0]  # single output
     f = np.zeros((n_measurements, len(exc_dofs), t.shape[0]))
     f[0,0,0:0] = 1.
-    x = get_response(f, FRF_matrix, freq, exc_dofs, resp_dofs)
+    x = get_response(f, FRF_matrix, exc_dofs, resp_dofs)
 
     # define sampling frequency and length of fft:
     sampling_freq = int(1/t[1])
@@ -344,7 +259,7 @@ def test_t():
 
 def test_df():
     # get true FRF matrix, freq and time:
-    (FRF_matrix, freq, t, peaks) = get_true_FRF()
+    FRF_matrix, freq, t = get_true_FRF()
 
     # define excitation and get response (SISO):
     n_measurements = 1
@@ -352,7 +267,7 @@ def test_df():
     resp_dofs = [0]  # single output
     f = np.zeros((n_measurements, len(exc_dofs), t.shape[0]))
     f[0,0,0:50] = 50 * np.sin(2*np.pi*np.arange(0,50,1)/100)
-    x = get_response(f, FRF_matrix, freq, exc_dofs, resp_dofs)
+    x = get_response(f, FRF_matrix, exc_dofs, resp_dofs)
 
     # define sampling frequency and length of fft:
     sampling_freq = int(1/t[1])

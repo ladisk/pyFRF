@@ -97,7 +97,7 @@ class FRF:
             (if data is not copied the applied window affects the source arrays).
         :type copy: bool
         :param analytical_inverse: If true, use the analytical formula for inversion of small 
-            (2x2, 3x3) matrices. Otherwise, the generalized peseudoinverse (np.linalg.pinv) is used. 
+            (2x2, 3x3) matrices. Otherwise, the generalized pseudoinverse (np.linalg.pinv) is used. 
             The analytical inverse is faster when 3 or less excitation DOFs are used, but might be
             less stable for ill-conditioned spectral matrices. Defaults to False.
         :type analytical_inverse: bool

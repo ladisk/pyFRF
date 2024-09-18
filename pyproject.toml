@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pyFRF"
-version = "1.1"
+version = "1.1.1"
 authors = [{name = "Janko Slavič, Luka Novak, Martin Česnik, et al.", email = "janko.slavic@fs.uni-lj.si"}]
 maintainers = [{name = "Janko Slavič, Luka Novak, Martin Česnik, et al.", email = "janko.slavic@fs.uni-lj.si"}]
 license = "MIT"

@@ -119,3 +119,4 @@ venv.bak/
 dmypy.json
 
 _temp/
+*.lvm.pkl

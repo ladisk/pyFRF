@@ -6,3 +6,4 @@ lvm_read
 pyExSi
 scipy
 matplotlib
+sdypy-sep005

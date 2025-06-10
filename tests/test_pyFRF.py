@@ -16,6 +16,8 @@ sys.path.insert(0, myPath + '/../')
 import model
 import pyFRF
 
+import pytest
+
 # function used to acquire true systems FRF:
 def get_true_FRF(T=10, fs=300, ndof=3):
 
@@ -374,6 +376,126 @@ def test_analytical_matrix_inverse():
     # test:
     np.testing.assert_allclose(test_object._matrix_inverse(A), 
                                    np.linalg.inv(A))
+    
 
+# SEP-005 compatibility tests:
+def generate_sep005_ts(fs=1000, n_samples=100, n_channels=1, quantity='f'):
+    """
+    Helper: Generate sep-005 dict with synthetic data.
+    """
+    time = np.linspace(0, 1, n_samples)
+    if n_channels == 1:
+        data = np.sin(2 * np.pi * 5 * time)
+    else:
+        data = np.array([np.sin(2 * np.pi * (5 + i) * time) for i in range(n_channels)])
+    return {
+        'data': data,
+        'fs': fs,
+        'quantity': quantity,
+        'name': 'test_signal',
+        'unit_str': 'm/s2' if quantity == 'a' else 'N',
+    }
+
+
+def test_sep005_single_channel():
+    """
+    Basic test: Single-channel input
+    """
+    exc_ts = generate_sep005_ts(quantity='f')
+    resp_ts = generate_sep005_ts(quantity='a')
+
+    frf = pyFRF.FRF(sampling_freq=None, exc=exc_ts, resp=resp_ts)
+
+    assert frf.exc.shape == (1, 1, 100)
+    assert frf.resp.shape == (1, 1, 100)
+    assert frf.exc_type == 'f'
+    assert frf.resp_type == 'a'
+    assert frf.exc_sampling_freq == 1000
+    assert frf.resp_sampling_freq == 1000
+
+
+def test_sep005_list_of_single_channel():
+    """
+    Test: Multiple timeseries, single-channel each
+    """
+    exc_ts_list = [generate_sep005_ts(quantity='f') for _ in range(3)]
+    resp_ts_list = [generate_sep005_ts(quantity='a') for _ in range(3)]
+
+    frf = pyFRF.FRF(sampling_freq=None, exc=exc_ts_list, resp=resp_ts_list)
+
+    assert frf.exc.shape == (3, 1, 100)
+    assert frf.resp.shape == (3, 1, 100)
+
+
+def test_sep005_multi_channel_input():
+    """
+    Test: Single timeseries with multi-channel data
+    """
+    exc_ts = generate_sep005_ts(n_channels=2, quantity='f')
+    resp_ts = generate_sep005_ts(n_channels=2, quantity='a')
+
+    frf = pyFRF.FRF(sampling_freq=None, exc=exc_ts, resp=resp_ts)
+
+    assert frf.exc.shape == (1, 2, 100)
+    assert frf.resp.shape == (1, 2, 100)
+
+
+def test_sep005_list_of_multi_channel():
+    """
+    Test: List of multi-channel inputs (full MIMO case)
+    """
+    exc_ts_list = [generate_sep005_ts(n_channels=2, quantity='f') for _ in range(3)]
+    resp_ts_list = [generate_sep005_ts(n_channels=4, quantity='a') for _ in range(3)]
+
+    frf = pyFRF.FRF(sampling_freq=None, exc=exc_ts_list, resp=resp_ts_list)
+
+    assert frf.exc.shape == (3, 2, 100)
+    assert frf.resp.shape == (3, 4, 100)
+
+
+def test_sep005_mismatched_quantity():
+    """
+    Test: Mismatched quantities in excitation and response
+    """
+    exc_ts = generate_sep005_ts(quantity='f')
+    resp_ts_1 = generate_sep005_ts(quantity='a')
+    resp_ts_2 = generate_sep005_ts(quantity='v')
+    with pytest.raises(ValueError):
+        pyFRF.FRF(sampling_freq=None, exc=exc_ts, resp=[resp_ts_1, resp_ts_2])
+
+def test_sep005_unsupported_quantity():
+    """
+    Test: Unsupported quantity type
+    """
+    ts = generate_sep005_ts(quantity='x')  # Invalid quantity
+    with pytest.raises(ValueError):
+        pyFRF.FRF(sampling_freq=None, exc=ts, resp=ts)
+
+def test_add_data_with_sep005():
+    """
+    Test: Adding new data to an existing pyFRF object
+    """
+    # Initial signals: 2 measurements, single channel each
+    exc_ts_list = [generate_sep005_ts(quantity='f') for _ in range(2)]
+    resp_ts_list = [generate_sep005_ts(quantity='a') for _ in range(2)]
+    
+    frf = pyFRF.FRF(sampling_freq=None, exc=exc_ts_list, resp=resp_ts_list)
+    assert frf.total_meas == 2  # two measurements
+
+    # New signals: 1 measurement, single channel
+    new_exc_ts = generate_sep005_ts(quantity='f')
+    new_resp_ts = generate_sep005_ts(quantity='a')
+
+    frf.add_data(exc=new_exc_ts, resp=new_resp_ts)
+
+    # Now 3 measurements should exist
+    assert frf.total_meas == 3
+
+    # Confirm time dimension consistency
+    assert frf.exc.shape[-1] == new_exc_ts['data'].shape[-1]
+    assert frf.resp.shape[-1] == new_resp_ts['data'].shape[-1]
+
+
+# Run the tests
 if __name__ == '__main__':
     np.testing.run_module_suite()

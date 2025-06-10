@@ -7,10 +7,11 @@ Classes:
 """
 
 import numpy as np
+from sdypy_sep005.sep005 import assert_sep005
 import scipy
 import warnings
 
-__version__ = '1.1.1'
+__version__ = '1.1.2'
 _EXC_TYPES = ['f', 'a', 'v', 'd', 'e']  # force for EMA and kinematics for OMA
 _RESP_TYPES = ['a', 'v', 'd', 'e']  # acceleration, velocity, displacement, strain
 _FRF_TYPES = ['H1', 'H2', 'Hv', 'ODS']
@@ -55,47 +56,98 @@ class FRF:
             int - same sampling frequency for both excitation and response signals.
             tuple, list - different sampling frequencies for excitation and reponse signals. 
             First element represents excitation, second element represents response sampling frequency.
+            If input data is SEP-005 compliant, this parameter should be None or equal to excitation timeseries sampling frequency.
         :type sampling_freq: int, tuple(int), list[int]
-        :param exc: Excitation array.
-            A 3D, 2D or 1D ndarray:
-            3D (general shape, allows multiple inputs (MIMO, MISO)): `(number_of_measurements, excitation_DOFs, time_series)`.
+
+        :param exc: Excitation array or SEP-005 compliant timeseries.
+            A 3D, 2D or 1D ndarray, or a dict or list compliant with the SEP-005 standard:
+            3D (general shape, allows multiple inputs — MIMO, MISO): `(number_of_measurements, excitation_DOFs, time_series)`.
             2D (multiple measurements, single input): `(number_of_measurements, time_series)`.
-            1D (single measurement, single input): `(time_series)`.
-        :type exc: ndarray
-        :param resp: Response array.
-            A 3D, 2D or 1D ndarray:
-            3D (general shape, allows, multiple outputs): `(number_of_measurements, response_DOFs, time_series)`.
+            1D (single measurement, single input): `(time_series,)`.
+
+            SEP-005 compliant dict/list:
+            [
+                {
+                    'data': [...],      # time series data (1D or 2D). Shape can be:
+                                        # - (T,)               for single-channel data
+                                        # - (M, T)             for M-channel data
+                    'fs': 1000,         # sampling frequency in Hz
+                    'quantity': 'f'     # excitation type — one of _EXC_TYPES
+                },
+                ...
+            ]
+
+            All items must share the same sampling frequency and quantity type. The resulting shape will be:
+            - (N, 1, T) if each timeseries is 1D
+            - (N, M, T) if each timeseries is 2D with C channels
+
+            N is the number of measurements (length of the list).
+        :type exc: ndarray, dict, list
+
+        :param resp: Response array or SEP-005 compliant timeseries.
+            A 3D, 2D or 1D ndarray, or a dict or list compliant with the SEP-005 standard:
+            3D (general shape, allows multiple outputs — MIMO, SIMO): `(number_of_measurements, response_DOFs, time_series)`.
             2D (multiple measurements, single output): `(number_of_measurements, time_series)`.
-            1D (single measurement, single output): `(time_series)`.
-        :type resp: ndarray
+            1D (single measurement, single output): `(time_series,)`.
+
+            SEP-005 compliant dict/list:
+            [
+                {
+                    'data': [...],      # time series data (1D or 2D). Shape can be:
+                                        # - (T,)               for single-channel data
+                                        # - (M, T)             for M-channel data
+                    'fs': 1000,         # sampling frequency in Hz
+                    'quantity': 'a'     # response type — one of _RESP_TYPES
+                },
+                ...
+            ]
+
+            All items must share the same sampling frequency and quantity type. The resulting shape will be:
+            - (N, 1, T) if each timeseries is 1D
+            - (N, M, T) if each timeseries is 2D with C channels
+
+            N is the number of measurements (length of the list).
+        :type resp: ndarray, dict, list
+
         :param exc_type: Excitation type, see _EXC_TYPES.
         :type exc_type: str
+
         :param resp_type: Response type, see _RESP_TYPES.
         :type resp_type: str
+
         :param window: Scipy window used for cross power spectral desnity computation or 
             excitation and reponse signals. see _WINDOWS.
             str - used for csd. 
             tuple, list - first element is excitation signal window, second element is response signal window
         :type window: str, tuple(str), list[str]
+
         :param resp_delay: Response time delay (in seconds) with regards to the excitation.
         :type resp_delay: float
+
         :param weighting: weighting type used for averaging with continous measurements - see _WGH_TYPES.
             If exponential weighting is used, specify the number of averages - example: 'exponential:5'
         :type weighting: str
+
         :param fft_len: The length of the FFT (zero-padding if longer than length of data),
             If None, freq length matches time length.
         :type fft_len: int
+
         :param nperseg: Optional segment length, by default one segment (data length) is analyzed.
         :type nperseg: int
+
         :param noverlap: Optional segment overlap, by default ``noverlap = nperseg // 2``.
         :type noverlap: int
+
         :param archive_time_data: Archive the time data (this can consume a lot of memory).
         :type archive_time_data: bool
+
         :param frf_type: Default frf type returned at self.get_frf(), see _FRF_TYPES.
         :type frf_type: str
+
         :param copy: If true the excitation and response arrays are copied 
             (if data is not copied the applied window affects the source arrays).
         :type copy: bool
+
         :param analytical_inverse: If true, use the analytical formula for inversion of small 
             (2x2, 3x3) matrices. Otherwise, the generalized pseudoinverse (np.linalg.pinv) is used. 
             The analytical inverse is faster when 3 or less excitation DOFs are used, but might be
@@ -109,6 +161,39 @@ class FRF:
             raise ValueError("The n_averages argument is no longer supported. You can pass different array shapes of excitation "\
                              "and response data or provide N for exponential averaging through weighting argument.")
 
+        # Parse possible SEP-005 input:
+        is_sep_exc = isinstance(exc, (dict, list))
+        is_sep_resp = isinstance(resp, (dict, list))
+
+        if is_sep_exc or is_sep_resp:
+            if not (is_sep_exc and is_sep_resp):
+                raise ValueError("Both exc and resp must be SEP-005 dict/list if one is.")
+            
+            if exc_type != 'f' or resp_type != 'a':
+                if exc_type is not None or resp_type is not None:
+                    raise ValueError("exc_type and resp_type must not be set directly when using SEP-005.")
+
+            exc_data, exc_fs, exc_q = self._parse_sep005_timeseries(exc, _EXC_TYPES)
+            resp_data, resp_fs, resp_q = self._parse_sep005_timeseries(resp, _RESP_TYPES)
+
+            exc = exc_data
+            resp = resp_data
+            exc_type = exc_q
+            resp_type = resp_q
+            
+            if sampling_freq is not None:
+                if isinstance(sampling_freq, tuple) or isinstance(sampling_freq, list):
+                    if not np.array_equal(sampling_freq, (exc_fs, resp_fs)):
+                        raise ValueError("If sampling_freq is specified as tuple or list, it must match the excitation and response timeseries sampling frequencies.")
+                elif isinstance(sampling_freq, int):
+                    if sampling_freq != exc_fs:
+                        raise ValueError("If sampling_freq is specified, it must match the excitation timeseries sampling frequency.")
+
+            # handle SEP-005 compliant sampling frequency:
+            if exc_fs == resp_fs:
+                sampling_freq = exc_fs
+            else:
+                sampling_freq = (exc_fs, resp_fs)
 
         # sampling_freq info:
         if isinstance(sampling_freq, int):
@@ -249,12 +334,33 @@ class FRF:
     def add_data(self, exc, resp):
         """
         Adds new data - called at object creation if excitation and response signals are given.
-        Used also for continous data adding.
+        Used also for continuous data adding.
 
         :param exc: Excitation array.
         :param resp: Response array.
         :return: True if data is added.
         """
+
+        is_sep_exc = isinstance(exc, (dict, list))
+        is_sep_resp = isinstance(resp, (dict, list))
+        if is_sep_exc or is_sep_resp:
+            if not (is_sep_exc and is_sep_resp):
+                raise ValueError("Both exc and resp must be SEP-005 dict/list if one is.")
+
+            sep_exc, sep_fs_exc, sep_q_exc = self._parse_sep005_timeseries(exc, _EXC_TYPES)
+            sep_resp, sep_fs_resp, sep_q_resp = self._parse_sep005_timeseries(resp, _RESP_TYPES)
+
+            # Sanity check for consistency with object state
+            if sep_q_exc != self.exc_type:
+                raise ValueError(f"Excitation type mismatch: expected '{self.exc_type}', got '{sep_q_exc}'")
+            if sep_q_resp != self.resp_type:
+                raise ValueError(f"Response type mismatch: expected '{self.resp_type}', got '{sep_q_resp}'")
+            if sep_fs_exc != self.exc_sampling_freq or sep_fs_resp != self.resp_sampling_freq:
+                raise ValueError("Sampling frequency in SEP-005 input does not match object sampling frequency.")
+
+            exc = sep_exc
+            resp = sep_resp
+        
         if len(exc.shape) == 1:
             exc = np.expand_dims(exc, (0,1))
         if len(exc.shape) == 2:
@@ -368,6 +474,55 @@ class FRF:
         else:
             raise Exception('Incorrect input array shape!')
 
+
+    def _parse_sep005_timeseries(self, timeseries, allowed_quantities):
+        """
+        Parses a list or dict of timeseries data according to the SEP005 standard.
+        :param timeseries: List or dict of timeseries data.
+        :param allowed_quantities: List of allowed quantities for the timeseries.
+        :return: Tuple of (data, fs, quantity).
+        :rtype: tuple
+        :raises ValueError: If the timeseries data does not conform to the SEP005 standard or if there are inconsistencies.
+        """
+
+        if isinstance(timeseries, dict):
+            timeseries = [timeseries]
+
+        assert_sep005(timeseries)
+
+        data_list = []
+        fs_set = set()
+        q_set = set()
+
+        for ts in timeseries:
+            data = np.asarray(ts['data'])
+
+            if data.ndim == 1:
+                data = data[np.newaxis, :]  # → (1, T)
+            elif data.ndim != 2:
+                raise ValueError(f"SEP-005 timeseries 'data' must be 1D or 2D (channels x time), got shape {data.shape}")
+
+            data_list.append(data)
+            fs_set.add(ts['fs'])
+            q_set.add(ts['quantity'])
+
+        if len(fs_set) > 1:
+            raise ValueError("All signals must have the same sampling frequency.")
+        if len(q_set) > 1:
+            raise ValueError("All signals must have the same quantity type.")
+
+        quantity = q_set.pop()
+        if quantity not in allowed_quantities:
+            raise ValueError(f"Unsupported quantity: {quantity}")
+        fs = fs_set.pop()
+
+        # Stack into shape (n_signals, channels, time)
+        data = np.stack(data_list)
+        if data.ndim == 2:
+            data = data[:, np.newaxis, :]  # → (n, 1, T)
+
+        return data, fs, quantity
+        
     
     def _apply_exc_and_resp_window(self):
         """

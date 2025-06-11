@@ -11,7 +11,7 @@ from sdypy_sep005.sep005 import assert_sep005
 import scipy
 import warnings
 
-__version__ = '1.1.2'
+__version__ = '1.1.3'
 _EXC_TYPES = ['f', 'a', 'v', 'd', 'e']  # force for EMA and kinematics for OMA
 _RESP_TYPES = ['a', 'v', 'd', 'e']  # acceleration, velocity, displacement, strain
 _FRF_TYPES = ['H1', 'H2', 'Hv', 'ODS']

@@ -657,27 +657,37 @@ class FRF:
         #print("noverlap: ", self.noverlap)
         #print("fft_len: ", self.fft_len)
 
+        single_input = self.exc.shape[1] == 1
+
+        def _csd(sig_a, sig_b):
+            return scipy.signal.csd(sig_a[:self.fft_len_cutoff], sig_b[:self.fft_len_cutoff],
+                                    self.sampling_freq, window=self.csd_window_data, nperseg=self.nperseg,
+                                    noverlap=self.noverlap, nfft=self.fft_len)[1]
+
         for k in range(self.resp.shape[0]): # for each measurement
-            for i in range(S_XX.shape[0]):
-                for j in range(S_XX.shape[1]):
-                    S_XX[i,j] += scipy.signal.csd(self.resp[k][i][:self.fft_len_cutoff], self.resp[k][j][:self.fft_len_cutoff], 
-                                                  self.sampling_freq, window=self.csd_window_data, nperseg=self.nperseg, 
-                                                  noverlap=self.noverlap, nfft=self.fft_len)[1]
+            # Response auto/cross-spectra S_XX.
+            # The single-input estimators (H1, H2, Hv, ODS, coherence) only ever use the
+            # *diagonal* of S_XX, so for SISO/SIMO we skip the O(n_resp**2) off-diagonal
+            # cross-spectra entirely. The full matrix is only needed by the multi-input
+            # H2 estimator. This is the main fix for the SIMO slowdown reported in issue #20.
+            if single_input:
+                for i in range(S_XX.shape[0]):
+                    S_XX[i,i] += _csd(self.resp[k][i], self.resp[k][i])
+            else:
+                for i in range(S_XX.shape[0]):
+                    for j in range(S_XX.shape[1]):
+                        S_XX[i,j] += _csd(self.resp[k][i], self.resp[k][j])
             for i in range(S_FF.shape[0]):
                 for j in range(S_FF.shape[1]):
-                    S_FF[i,j] += scipy.signal.csd(self.exc[k][i][:self.fft_len_cutoff], self.exc[k][j][:self.fft_len_cutoff], 
-                                                  self.sampling_freq, window=self.csd_window_data, nperseg=self.nperseg, 
-                                                  noverlap=self.noverlap, nfft=self.fft_len)[1]
-            for i in range(S_XF.shape[0]):
-                for j in range(S_XF.shape[1]):
-                    S_XF[i,j] += scipy.signal.csd(self.resp[k][i][:self.fft_len_cutoff], self.exc[k][j][:self.fft_len_cutoff], 
-                                                  self.sampling_freq, window=self.csd_window_data, nperseg=self.nperseg, 
-                                                  noverlap=self.noverlap, nfft=self.fft_len)[1]
-            for i in range(S_FX.shape[0]):
-                for j in range(S_FX.shape[1]):
-                    S_FX[i,j] += scipy.signal.csd(self.exc[k][i][:self.fft_len_cutoff], self.resp[k][j][:self.fft_len_cutoff], 
-                                                  self.sampling_freq, window=self.csd_window_data, nperseg=self.nperseg, 
-                                                  noverlap=self.noverlap, nfft=self.fft_len)[1]
+                    S_FF[i,j] += _csd(self.exc[k][i], self.exc[k][j])
+            # Response-excitation cross-spectra. S_FX is the conjugate transpose of S_XF
+            # (csd(f, x) == conj(csd(x, f))), so compute S_XF once and mirror it into S_FX
+            # instead of recomputing every cross-spectrum a second time.
+            for i in range(S_XF.shape[0]):      # response DOF
+                for j in range(S_XF.shape[1]):  # excitation DOF
+                    c = _csd(self.resp[k][i], self.exc[k][j])
+                    S_XF[i,j] += c
+                    S_FX[j,i] += np.conj(c)
 
         if self.ntimes_meas_added == 1:  # if the measurements are added for the first time:
             #print(self.ntimes_meas_added, " time the measurements were added - csd")                        

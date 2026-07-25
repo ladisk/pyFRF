@@ -176,10 +176,69 @@ def test_FRF_MIMO():
                                 rtol=5e-01, atol=1e-06)
                 
         # test frf phase:
-        np.testing.assert_allclose(np.angle(H[:, :, 1:-1]), 
+        np.testing.assert_allclose(np.angle(H[:, :, 1:-1]),
                                    np.angle(true_frf[:,:,1:-1]),
                                    rtol=5e-1, atol=3e-01)
-            
+
+
+def test_FRF_SIMO_add_all_equals_per_channel():
+    """Regression test for issue #20.
+
+    For a single-input (SIMO) measurement the FRF must be identical whether all
+    response channels are added in one call or channel-by-channel. The performance
+    fix in ``_get_frf_av`` (diagonal-only ``S_XX`` for single input and ``S_FX``
+    mirrored from ``S_XF``) must not change the numerical result. It also checks
+    the two structural invariants the fix relies on.
+    """
+    T = 10
+    fs = 300
+    T_welch = 1
+    N_welch = int(T_welch * fs)
+
+    FRF_matrix, freq, t = get_true_FRF(T=T, fs=fs)
+
+    n_measurements = 5
+    exc_dofs = [0]             # single input -> SIMO
+    resp_dofs = [0, 1, 2]      # multiple outputs
+    PSD = pyExSi.get_psd(freq, 0, fs / 2)  # flat one-sided PSD
+    f = np.zeros((n_measurements, len(exc_dofs), t.shape[0]))
+    for i in range(f.shape[0]):
+        for j in range(f.shape[1]):
+            f[i][j] = pyExSi.random_gaussian(f.shape[-1], PSD, fs)
+    x = get_response(f, FRF_matrix, exc_dofs, resp_dofs)
+
+    common = dict(sampling_freq=fs, window="hann", exc_type='f', resp_type='d',
+                  nperseg=N_welch, noverlap=N_welch // 2, fft_len=N_welch)
+
+    # (A) all response channels added at once
+    frf_all = pyFRF.FRF(**common)
+    frf_all.add_data(f[:, 0, :], x)
+
+    # (B) each response channel added on its own
+    per_channel = []
+    for ch in range(len(resp_dofs)):
+        obj = pyFRF.FRF(**common)
+        obj.add_data(f[:, 0, :], x[:, ch, :])
+        per_channel.append(obj)
+
+    for est in ['H1', 'H2', 'Hv']:
+        H_all = frf_all.get_FRF(est)
+        H_ref = np.concatenate([o.get_FRF(est) for o in per_channel], axis=0)
+        np.testing.assert_allclose(H_all, H_ref, rtol=1e-12, atol=1e-12)
+
+    coh_all = frf_all.get_coherence()
+    coh_ref = np.concatenate([o.get_coherence() for o in per_channel], axis=0)
+    np.testing.assert_allclose(coh_all, coh_ref, rtol=1e-12, atol=1e-12)
+
+    # invariant 1: S_FX is the conjugate transpose of S_XF
+    np.testing.assert_allclose(frf_all.S_FX, np.conj(frf_all.S_XF).transpose(1, 0, 2),
+                               rtol=0, atol=1e-20)
+    # invariant 2: for single input the off-diagonal of S_XX is never computed
+    off_diagonal = frf_all.S_XX.copy()
+    for i in range(len(resp_dofs)):
+        off_diagonal[i, i, :] = 0
+    assert np.all(off_diagonal == 0)
+
 
 def test_freq():
     # get true FRF matrix, freq and time:

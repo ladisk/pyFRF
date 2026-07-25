@@ -240,6 +240,42 @@ def test_FRF_SIMO_add_all_equals_per_channel():
     assert np.all(off_diagonal == 0)
 
 
+def test_MIMO_cross_spectra_hermitian():
+    """Regression test for the Hermitian upper-triangle optimization (issue #20).
+
+    For multiple inputs ``S_XX`` and ``S_FF`` are built from their upper triangle
+    only and mirrored with a conjugate. Verify the stored matrices are Hermitian
+    (``M[i,j] == conj(M[j,i])``, which also forces a real diagonal) and that the
+    off-diagonal response cross-spectra are actually populated by the mirror.
+    """
+    T = 4
+    fs = 300
+    N_welch = fs  # 1 s Welch segments
+
+    FRF_matrix, freq, t = get_true_FRF(T=T, fs=fs)
+
+    n_measurements = 4
+    exc_dofs = [0, 1]          # multiple inputs -> MIMO
+    resp_dofs = [0, 1, 2]
+    PSD = pyExSi.get_psd(freq, 0, fs / 2)
+    f = np.zeros((n_measurements, len(exc_dofs), t.shape[0]))
+    for i in range(f.shape[0]):
+        for j in range(f.shape[1]):
+            f[i][j] = pyExSi.random_gaussian(f.shape[-1], PSD, fs)
+    x = get_response(f, FRF_matrix, exc_dofs, resp_dofs)
+
+    obj = pyFRF.FRF(sampling_freq=fs, exc=f, resp=x, window="hann",
+                    exc_type='f', resp_type='d',
+                    nperseg=N_welch, noverlap=N_welch // 2, fft_len=N_welch)
+
+    for M in (obj.S_XX, obj.S_FF):
+        np.testing.assert_allclose(M, np.conj(M).transpose(1, 0, 2), rtol=1e-9, atol=1e-12)
+
+    # the mirror actually filled the lower/upper off-diagonal response cross-spectra
+    assert np.any(np.abs(obj.S_XX[0, 1, :]) > 0)
+    assert np.any(np.abs(obj.S_XX[1, 0, :]) > 0)
+
+
 def test_freq():
     # get true FRF matrix, freq and time:
     FRF_matrix, freq, t = get_true_FRF()

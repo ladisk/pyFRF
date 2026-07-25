@@ -674,12 +674,24 @@ class FRF:
                 for i in range(S_XX.shape[0]):
                     S_XX[i,i] += _csd(self.resp[k][i], self.resp[k][i])
             else:
+                # S_XX is Hermitian (S_XX[j,i] == conj(S_XX[i,j])), so only the upper
+                # triangle needs a csd; the lower triangle is its conjugate mirror.
+                # Performance: n_resp*(n_resp+1)/2 csd calls per measurement instead of
+                # n_resp**2 -- about 2x fewer for many response channels.
                 for i in range(S_XX.shape[0]):
-                    for j in range(S_XX.shape[1]):
-                        S_XX[i,j] += _csd(self.resp[k][i], self.resp[k][j])
+                    for j in range(i, S_XX.shape[1]):
+                        c = _csd(self.resp[k][i], self.resp[k][j])
+                        S_XX[i,j] += c
+                        if i != j:
+                            S_XX[j,i] += np.conj(c)
+            # S_FF is Hermitian too; compute the upper triangle only.
+            # Performance: n_exc*(n_exc+1)/2 csd calls per measurement instead of n_exc**2.
             for i in range(S_FF.shape[0]):
-                for j in range(S_FF.shape[1]):
-                    S_FF[i,j] += _csd(self.exc[k][i], self.exc[k][j])
+                for j in range(i, S_FF.shape[1]):
+                    c = _csd(self.exc[k][i], self.exc[k][j])
+                    S_FF[i,j] += c
+                    if i != j:
+                        S_FF[j,i] += np.conj(c)
             # Response-excitation cross-spectra. S_FX is the conjugate transpose of S_XF
             # (csd(f, x) == conj(csd(x, f))), so compute S_XF once and mirror it into S_FX
             # instead of recomputing every cross-spectrum a second time.

@@ -424,13 +424,18 @@ class FRF:
         self._get_frf_av()
         self._data_available = True
         
-        # accelerance/mobility/receptance conversion frf multiplication factor:
-        if self.resp_type == 'a':
-            self.frf_conversion = np.power(-1.j / self.get_w_axis(), 2)
-        elif self.resp_type == 'v':
-            self.frf_conversion = np.power(-1.j / self.get_w_axis(), 1)
-        else:
-            self.frf_conversion = np.ones(self.get_w_axis().shape)
+        # accelerance/mobility/receptance conversion frf multiplication factor.
+        # At 0 Hz (w = 0) the acceleration/velocity conversion divides by zero; this is
+        # mathematically undefined (no static term recoverable from a/v data), so the
+        # benign divide/invalid warnings are ignored and the DC bin is left as inf/nan
+        # (consistent with how the H1/H2/Hv estimators already handle the 0 Hz line).
+        with np.errstate(divide='ignore', invalid='ignore'):
+            if self.resp_type == 'a':
+                self.frf_conversion = np.power(-1.j / self.get_w_axis(), 2)
+            elif self.resp_type == 'v':
+                self.frf_conversion = np.power(-1.j / self.get_w_axis(), 1)
+            else:
+                self.frf_conversion = np.ones(self.get_w_axis().shape)
         
         return True
     

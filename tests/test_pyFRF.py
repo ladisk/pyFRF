@@ -9,6 +9,7 @@ import scipy
 from scipy.signal import detrend
 import pyExSi
 import sys, os
+import warnings
 
 myPath = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, myPath + '/../')
@@ -730,6 +731,30 @@ def test_FRF_SIMO_pylump_output_noise():
     coh = np.abs(frf_noisy.get_coherence())
     assert np.nanmax(coh[:, sl]) > 0.9               # high coherence near resonances
     assert np.nanmax(coh[:, sl]) <= 1.0 + 1e-9       # bounded above by 1
+
+
+def test_frf_conversion_no_dc_warning():
+    """Building an accelerance/mobility FRF must not spam divide-by-zero warnings.
+
+    The receptance->acceleration/velocity conversion factor divides by the angular
+    frequency, which is 0 at the DC (0 Hz) line. That is expected (the DC term is
+    undefined for a/v data) and must be handled silently rather than raising a
+    RuntimeWarning on every FRF object.
+    """
+    rng = np.random.default_rng(0)
+    N = 512
+    exc = rng.standard_normal((1, 1, N))
+    resp = rng.standard_normal((1, 1, N))
+    for resp_type in ('a', 'v', 'd'):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            obj = pyFRF.FRF(sampling_freq=1000, exc=exc, resp=resp, exc_type='f',
+                            resp_type=resp_type, window='hann', fft_len=N)
+            obj.get_FRF('H1', form='accelerance')
+        offending = [str(w.message) for w in caught
+                     if issubclass(w.category, RuntimeWarning)
+                     and ('divide by zero' in str(w.message) or 'invalid value' in str(w.message))]
+        assert not offending, f"resp_type={resp_type!r} emitted: {offending}"
 
 
 # Run the tests

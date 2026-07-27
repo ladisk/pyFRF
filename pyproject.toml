@@ -50,6 +50,7 @@ dev = [
     "twine",
     "wheel",
     "pytest",
+    "pyLump; python_version >= '3.10'",
     "sphinx-rtd-theme",
     "nbsphinx",
     "nbsphinx_link",

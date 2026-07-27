@@ -600,6 +600,138 @@ def test_add_data_with_sep005():
     assert frf.resp.shape[-1] == new_resp_ts['data'].shape[-1]
 
 
+def _assert_frf_close_where_finite(H, ref, rtol=1e-6, atol=1e-6, max_nonfinite_frac=0.01):
+    """Assert estimated FRF ``H`` matches ``ref`` on all finite bins.
+
+    The H2 and Hv estimators are mathematically undefined at response nodes
+    (where the response, and hence the response-excitation cross-spectrum, is
+    zero), producing isolated NaN/inf bins; ``ref`` is finite everywhere. Compare
+    on the finite bins and require that almost all bins are finite so a degenerate
+    (all-NaN) estimate cannot pass.
+    """
+    finite = np.isfinite(H)
+    assert finite.mean() > 1 - max_nonfinite_frac
+    np.testing.assert_allclose(H[finite], ref[finite], rtol=rtol, atol=atol)
+
+
+def test_FRF_SIMO_pylump():
+    """SIMO FRF cross-validated against an independent pyLump MDOF model.
+
+    A mass-spring-damper model (pyLump) synthesises the exact response of a
+    single-input / multiple-output system to a broadband excitation; pyFRF must
+    recover the frequency response function that generated it. The reference is
+    the FRF returned by ``Model.get_response(return_matrix=True)`` -- i.e. the
+    exact transfer function the response was built from (pyLump's ``get_response``
+    and ``get_FRF_matrix`` differ by one frequency bin, so the used matrix is the
+    self-consistent ground truth for the generated data).
+    """
+    pyLump = pytest.importorskip("pyLump")
+    rng = np.random.default_rng(1)
+    n_dof, fs, N = 5, 2000, 8000
+    model = pyLump.Model(n_dof, mass=1.0, stiffness=2e4, damping=2.0, boundaries="both")
+
+    exc_dof, resp_dof = [0], [0, 1, 2, 3, 4]
+    u = rng.standard_normal(N)
+    resp, H_used = model.get_response(exc_dof, u, fs, resp_dof=resp_dof,
+                                      domain='f', return_matrix=True)
+    ref = H_used[np.ix_(resp_dof, exc_dof)]          # (n_resp, n_exc, freq), receptance
+
+    frf = pyFRF.FRF(sampling_freq=fs, exc=u[None, None, :], resp=resp[None, :, :],
+                    exc_type='f', resp_type='d', window='none',
+                    nperseg=N, noverlap=0, fft_len=N)
+
+    sl = slice(1, -1)                                # skip DC and Nyquist bins
+    ref_s = ref[:, :, sl]
+    for est in ('H1', 'H2', 'Hv'):
+        H = frf.get_FRF(est)
+        assert H.shape == ref.shape
+        _assert_frf_close_where_finite(H[:, :, sl], ref_s)
+    # H1 is well-defined at every frequency line for a single input
+    assert np.all(np.isfinite(frf.get_FRF('H1')[:, :, sl]))
+
+    # noise-free single measurement -> coherence is unity where defined
+    coh = np.abs(frf.get_coherence()[:, sl])
+    finite = np.isfinite(coh)
+    assert finite.mean() > 0.99
+    np.testing.assert_allclose(coh[finite], 1.0, atol=1e-6)
+
+
+def test_FRF_MIMO_pylump():
+    """MIMO FRF cross-validated against an independent pyLump MDOF model.
+
+    Two inputs, four outputs, several linearly independent excitation records so
+    the input cross-spectral matrix is invertible. pyFRF's H1/H2 estimators must
+    recover the FRF used to synthesise the responses.
+    """
+    pyLump = pytest.importorskip("pyLump")
+    rng = np.random.default_rng(7)
+    n_dof, fs, N = 4, 2000, 6000
+    model = pyLump.Model(n_dof, mass=[1, 1.5, 1.2, 0.8], stiffness=1.5e4,
+                         damping=3.0, boundaries="both")
+
+    exc_dof, resp_dof = [0, 2], [0, 1, 2, 3]
+    n_meas = 6                                       # >= number of inputs
+    exc = np.empty((n_meas, len(exc_dof), N))
+    resp = np.empty((n_meas, len(resp_dof), N))
+    H_used = None
+    for m in range(n_meas):
+        u = rng.standard_normal((len(exc_dof), N))
+        r, H_used = model.get_response(exc_dof, u, fs, resp_dof=resp_dof,
+                                       domain='f', return_matrix=True)
+        exc[m], resp[m] = u, r
+    ref = H_used[np.ix_(resp_dof, exc_dof)]          # (n_resp, n_exc, freq)
+
+    frf = pyFRF.FRF(sampling_freq=fs, exc=exc, resp=resp, exc_type='f', resp_type='d',
+                    window='none', nperseg=N, noverlap=0, fft_len=N)
+
+    sl = slice(1, -1)
+    ref_s = ref[:, :, sl]
+    for est in ('H1', 'H2'):                         # Hv is single-input only
+        H = frf.get_FRF(est)
+        assert H.shape == ref.shape
+        _assert_frf_close_where_finite(H[:, :, sl], ref_s)
+
+    coh = np.abs(frf.get_coherence()[:, sl])
+    finite = np.isfinite(coh)
+    assert finite.mean() > 0.99
+    np.testing.assert_allclose(coh[finite], 1.0, atol=1e-6)
+
+
+def test_FRF_SIMO_pylump_output_noise():
+    """H1 is insensitive to output (response) noise.
+
+    With noise added only to the responses, the (Welch-averaged) H1 estimator must
+    still recover the noise-free H1, and the coherence must stay within [0, 1]
+    while reaching high values near the resonances.
+    """
+    pyLump = pytest.importorskip("pyLump")
+    rng = np.random.default_rng(11)
+    n_dof, fs, N = 4, 1500, 12000
+    model = pyLump.Model(n_dof, mass=1.0, stiffness=1e4, damping=2.0, boundaries="both")
+
+    exc_dof, resp_dof = [0], [0, 1, 2, 3]
+    u = rng.standard_normal(N)
+    resp, _ = model.get_response(exc_dof, u, fs, resp_dof=resp_dof,
+                                 domain='f', return_matrix=True)
+    noise = 0.02 * np.std(resp) * rng.standard_normal(resp.shape)
+
+    nps = 2048
+    common = dict(sampling_freq=fs, exc_type='f', resp_type='d', window='hann',
+                  nperseg=nps, noverlap=nps // 2, fft_len=nps)
+    H1_clean = pyFRF.FRF(exc=u[None, None, :], resp=resp[None, :, :], **common).get_FRF('H1')
+    frf_noisy = pyFRF.FRF(exc=u[None, None, :], resp=(resp + noise)[None, :, :], **common)
+    H1_noisy = frf_noisy.get_FRF('H1')
+
+    sl = slice(1, -1)
+    # 2 % output noise perturbs H1 by well under 5 %
+    assert np.nanmax(np.abs(H1_noisy[:, :, sl] - H1_clean[:, :, sl])) \
+        <= 0.05 * np.nanmax(np.abs(H1_clean[:, :, sl]))
+
+    coh = np.abs(frf_noisy.get_coherence())
+    assert np.nanmax(coh[:, sl]) > 0.9               # high coherence near resonances
+    assert np.nanmax(coh[:, sl]) <= 1.0 + 1e-9       # bounded above by 1
+
+
 # Run the tests
 if __name__ == '__main__':
     np.testing.run_module_suite()

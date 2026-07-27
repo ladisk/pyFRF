@@ -7,3 +7,4 @@ pyExSi
 scipy
 matplotlib
 sdypy-sep005
+pyLump; python_version >= "3.10"

@@ -32,6 +32,13 @@ class FRF:
     """
     Perform Dual Channel Spectral Analysis
 
+    Note:
+        For single-input (SISO/SIMO) measurements the response cross-spectral
+        matrix ``FRF.S_XX`` is populated on its diagonal only; the off-diagonal
+        terms are left at zero because no estimator uses them in that case. The
+        full matrix is computed only for multiple inputs (MISO/MIMO). Code that
+        reads ``FRF.S_XX`` directly and relies on the off-diagonal response
+        cross-spectra should therefore only do so for multi-input data.
     """
     
     def __init__(self, sampling_freq,

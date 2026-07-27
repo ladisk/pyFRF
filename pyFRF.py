@@ -156,10 +156,13 @@ class FRF:
             (if data is not copied the applied window affects the source arrays).
         :type copy: bool
 
-        :param analytical_inverse: If true, use the analytical formula for inversion of small 
-            (2x2, 3x3) matrices. Otherwise, the generalized pseudoinverse (np.linalg.pinv) is used. 
-            The analytical inverse is faster when 3 or less excitation DOFs are used, but might be
-            less stable for ill-conditioned spectral matrices. Defaults to False.
+        :param analytical_inverse: If True, invert the multi-input spectral matrices with a
+            fast direct inverse (the analytical formula for a single 2x2/3x3 matrix, or
+            np.linalg.inv for the batched frequency stack in H1/H2/coherence) -- faster, but
+            assumes well-conditioned matrices. If False (default), the generalized
+            pseudoinverse (np.linalg.pinv) is used, which is robust to ill-conditioned /
+            rank-deficient spectral matrices. In all cases the inversion is now performed for
+            every frequency line at once rather than in a Python loop.
         :type analytical_inverse: bool
         """
         # previous pyFRF kwargs:
@@ -849,6 +852,27 @@ class FRF:
                 return k * amp**2
         
    
+    def _batched_inverse(self, spectra):
+        """
+        Invert a stack of ``(dof, dof, freq)`` spectral matrices over all frequency
+        lines at once, avoiding a Python loop over frequencies.
+
+        Uses ``np.linalg.inv`` when ``analytical_inverse`` is set and the matrices are
+        square (faster, assumes well-conditioned inputs), otherwise the pseudoinverse
+        ``np.linalg.pinv`` (robust to rank-deficient / non-square inputs). Batched
+        inversion is dramatically faster than the previous per-frequency loop.
+
+        :param spectra: ndarray of shape (dof_a, dof_b, freq).
+        :return: inverse of shape (dof_b, dof_a, freq).
+        :rtype: ndarray
+        """
+        stacked = spectra.transpose(2, 0, 1)  # (freq, dof_a, dof_b)
+        if self.analytical_inverse and stacked.shape[1] == stacked.shape[2]:
+            inverse = np.linalg.inv(stacked)
+        else:
+            inverse = np.linalg.pinv(stacked)
+        return inverse.transpose(1, 2, 0)
+
     def get_H1(self):
         """
         Get H1 FRF averaged estimator (receptance), preferable call via get_FRF().
@@ -867,11 +891,10 @@ class FRF:
             if self.exc.shape[1] == 1:  # SISO, SIMO
                 H1 = self.frf_norm * S_FX / S_FF
             else:  # MISO, MIMO
-                freq_len = np.fft.rfftfreq(self.fft_len, 1. / self.sampling_freq).shape[0]
-                H1 = np.zeros((self.resp.shape[1], self.exc.shape[1], freq_len), dtype="complex128")
-                for i in range(freq_len):
-                    H1[:, :, i] = self.frf_norm * (self._matrix_inverse(self.S_FF[:, :, i]) @ self.S_FX[:, :, i]).T 
-                    
+                # H1 = frf_norm * (inv(S_FF) @ S_FX).T, vectorised over all frequencies
+                S_FF_inv = self._batched_inverse(self.S_FF)          # (n_exc, n_exc, freq)
+                H1 = self.frf_norm * np.einsum('ikf,kjf->jif', S_FF_inv, self.S_FX)
+
             return  (H1 * self.frf_conversion) / self._correct_time_delay()
         
     # OK:    
@@ -894,10 +917,9 @@ class FRF:
                 # S_XX is already stored as the (resp_DOF, 1, freq) response auto-spectra
                 H2 = self.frf_norm * S_XX / S_XF
             else:
-                freq_len = np.fft.rfftfreq(self.fft_len, 1. / self.sampling_freq).shape[0]
-                H2 = np.zeros((self.resp.shape[1], self.exc.shape[1], freq_len), dtype="complex128")
-                for i in range(freq_len):
-                    H2[:, :, i] = self.frf_norm * (self._matrix_inverse(self.S_XF[:, :, i]) @ self._S_XX[:, :, i]).T 
+                # H2 = frf_norm * (pinv(S_XF) @ S_XX).T, vectorised over all frequencies
+                S_XF_inv = self._batched_inverse(self.S_XF)          # (n_exc, n_resp, freq)
+                H2 = self.frf_norm * np.einsum('ikf,kjf->jif', S_XF_inv, self._S_XX)
             return (H2 * self.frf_conversion) / self._correct_time_delay()
         
     def get_Hv(self):
@@ -978,17 +1000,11 @@ class FRF:
             if self.exc.shape[1] == 1:  # SISO, SIMO
                 return np.abs(self.get_H1()[:,0,:] / self.get_H2()[:,0,:])
             else:  # MIMO, MISO
-                freq_len = np.fft.rfftfreq(self.fft_len, 1. / self.sampling_freq).shape[0]
-                coh = np.zeros((self.resp.shape[1], freq_len), dtype="complex128")
-            
-                for i in range(self.resp.shape[1]):
-                    if (self.S_FF[:,:,0].shape == (2,2)) or (self.S_FF[:,:,0].shape == (3,3)):
-                        for j in range(freq_len):
-                            coh[i,j] = ((self.S_XF[i,:,j] @ self._matrix_inverse(self.S_FF[:,:,j])) @ self.S_FX[:,i,j])
-                    else:
-                        for j in range(freq_len):
-                            coh[i,j] = ((self.S_XF[i,:,j] @ np.linalg.inv(self.S_FF[:,:,j])) @ self.S_FX[:,i,j])
-                    coh[i] = coh[i] / self._S_XX[i,i]
+                # coh[i] = (S_XF[i] @ inv(S_FF) @ S_FX[:,i]) / S_XX[i,i], vectorised over
+                # all frequencies and response DOFs at once.
+                S_FF_inv = self._batched_inverse(self.S_FF)          # (n_exc, n_exc, freq)
+                coh = np.einsum('iaf,abf,bif->if', self.S_XF, S_FF_inv, self.S_FX, optimize=True)
+                coh = coh / np.einsum('iif->if', self._S_XX)         # divide by S_XX diagonal
                 return coh
 
 

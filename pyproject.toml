@@ -6,6 +6,14 @@ build-backend = "hatchling.build"
 [tool.hatch.version]
 path = "pyFRF.py"
 
+# pyFRF is a set of top-level modules (not a package dir), so list them
+# explicitly; otherwise hatchling only ships pyFRF.py and drops fft_tools.py.
+[tool.hatch.build.targets.wheel]
+include = ["pyFRF.py", "fft_tools.py"]
+
+[tool.hatch.build.targets.sdist]
+include = ["pyFRF.py", "fft_tools.py", "readme.rst", "requirements.txt", "LICENSE"]
+
 [project]
 name = "pyFRF"
 dynamic = ["version"]

@@ -2,9 +2,13 @@
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+# Single source of truth for the version: pyFRF.__version__ in pyFRF.py.
+[tool.hatch.version]
+path = "pyFRF.py"
+
 [project]
 name = "pyFRF"
-version = "1.1.4"
+dynamic = ["version"]
 authors = [{name = "Janko Slavič, Luka Novak, Martin Česnik, et al.", email = "janko.slavic@fs.uni-lj.si"}]
 maintainers = [{name = "Janko Slavič, Luka Novak, Martin Česnik, et al.", email = "janko.slavic@fs.uni-lj.si"}]
 license = "MIT"

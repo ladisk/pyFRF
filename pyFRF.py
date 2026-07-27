@@ -33,12 +33,13 @@ class FRF:
     Perform Dual Channel Spectral Analysis
 
     Note:
-        For single-input (SISO/SIMO) measurements the response cross-spectral
-        matrix ``FRF.S_XX`` is populated on its diagonal only; the off-diagonal
-        terms are left at zero because no estimator uses them in that case. The
-        full matrix is computed only for multiple inputs (MISO/MIMO). Code that
-        reads ``FRF.S_XX`` directly and relies on the off-diagonal response
-        cross-spectra should therefore only do so for multi-input data.
+        ``FRF.S_XX`` always returns the full response cross-spectral matrix of
+        shape ``(response_DOF, response_DOF, freq)``, so existing ``S_XX[i, i]``
+        indexing keeps working. For a single input the off-diagonal terms are
+        unused, so the matrix is stored internally in compact form (the response
+        auto-spectra, ``self._S_XX`` of shape ``(response_DOF, 1, freq)``) and the
+        full matrix is materialised on demand with zeros off-diagonal. For a
+        single input the off-diagonal cross-spectra are therefore always zero.
     """
     
     def __init__(self, sampling_freq,
@@ -639,6 +640,27 @@ class FRF:
         return np.arange(self.samples) / self.sampling_freq
     
     
+    @property
+    def S_XX(self):
+        """
+        Response cross-spectral matrix, shape ``(response_DOF, response_DOF, freq)``.
+
+        For a single input the matrix is stored internally in compact form (only the
+        response auto-spectra; see ``self._S_XX`` with shape ``(response_DOF, 1, freq)``)
+        because no estimator uses the off-diagonal terms. Reading this property rebuilds
+        the full matrix on demand, with the auto-spectra on the diagonal and zeros
+        off-diagonal, so existing ``S_XX[i, i]`` indexing keeps working. For multiple
+        inputs the stored matrix is already full and returned as-is.
+        """
+        if not getattr(self, '_single_input', False):
+            return self._S_XX  # multiple inputs: already the full matrix
+        # single input: materialise the full (n_resp, n_resp, freq) matrix on demand
+        n_resp = self._S_XX.shape[0]
+        full = np.zeros((n_resp, n_resp, self._S_XX.shape[2]), dtype=self._S_XX.dtype)
+        idx = np.arange(n_resp)
+        full[idx, idx, :] = self._S_XX[:, 0, :]
+        return full
+
     def _get_frf_av(self):
         """
         Calculates the averaged FRF based on averaging and weighting type, using scipy.csd.
@@ -652,7 +674,14 @@ class FRF:
         """
         # obtain cross and auto spectra for current data
         freq_len = np.fft.rfftfreq(self.fft_len, 1. / self.sampling_freq).shape[0]
-        S_XX = np.zeros((self.resp.shape[1], self.resp.shape[1], freq_len), dtype="complex128")
+        single_input = self.exc.shape[1] == 1
+        self._single_input = single_input
+        # For a single input only the response auto-spectra (the diagonal of the full
+        # response cross-spectral matrix) are ever used, so S_XX is stored compactly with
+        # shape (n_resp, 1, freq) -- element [i, 0] is the auto-spectrum of response i.
+        # This keeps the memory O(n_resp) instead of O(n_resp**2). The dense matrix is
+        # built only for multiple inputs, where the H2 estimator needs the off-diagonals.
+        S_XX = np.zeros((self.resp.shape[1], 1 if single_input else self.resp.shape[1], freq_len), dtype="complex128")
         S_FF = np.zeros((self.exc.shape[1], self.exc.shape[1], freq_len), dtype="complex128")
         S_XF = np.zeros((self.resp.shape[1], self.exc.shape[1], freq_len), dtype="complex128")
         S_FX = np.zeros((self.exc.shape[1], self.resp.shape[1], freq_len), dtype="complex128")
@@ -664,8 +693,6 @@ class FRF:
         #print("noverlap: ", self.noverlap)
         #print("fft_len: ", self.fft_len)
 
-        single_input = self.exc.shape[1] == 1
-
         def _csd(sig_a, sig_b):
             return scipy.signal.csd(sig_a[:self.fft_len_cutoff], sig_b[:self.fft_len_cutoff],
                                     self.sampling_freq, window=self.csd_window_data, nperseg=self.nperseg,
@@ -674,12 +701,13 @@ class FRF:
         for k in range(self.resp.shape[0]): # for each measurement
             # Response auto/cross-spectra S_XX.
             # The single-input estimators (H1, H2, Hv, ODS, coherence) only ever use the
-            # *diagonal* of S_XX, so for SISO/SIMO we skip the O(n_resp**2) off-diagonal
+            # response auto-spectra, so for SISO/SIMO we compute just those (stored in the
+            # compact (n_resp, 1, freq) S_XX) and skip the O(n_resp**2) off-diagonal
             # cross-spectra entirely. The full matrix is only needed by the multi-input
             # H2 estimator. This is the main fix for the SIMO slowdown reported in issue #20.
             if single_input:
                 for i in range(S_XX.shape[0]):
-                    S_XX[i,i] += _csd(self.resp[k][i], self.resp[k][i])
+                    S_XX[i,0] += _csd(self.resp[k][i], self.resp[k][i])
             else:
                 # S_XX is Hermitian (S_XX[j,i] == conj(S_XX[i,j])), so only the upper
                 # triangle needs a csd; the lower triangle is its conjugate mirror.
@@ -710,7 +738,7 @@ class FRF:
 
         if self.ntimes_meas_added == 1:  # if the measurements are added for the first time:
             #print(self.ntimes_meas_added, " time the measurements were added - csd")                        
-            self.S_XX = S_XX / self.resp.shape[0]
+            self._S_XX = S_XX / self.resp.shape[0]
             self.S_FF = S_FF / self.resp.shape[0]
             self.S_XF = S_XF / self.resp.shape[0]
             self.S_FX = S_FX / self.resp.shape[0]
@@ -739,7 +767,7 @@ class FRF:
             
             #print("N: ", N)
 
-            self.S_XX = num_new_meas / N * S_XX + (N - num_new_meas) / N * self.S_XX
+            self._S_XX = num_new_meas / N * S_XX + (N - num_new_meas) / N * self._S_XX
             self.S_FF = num_new_meas / N * S_FF + (N - num_new_meas) / N * self.S_FF
             self.S_XF = num_new_meas / N * S_XF + (N - num_new_meas) / N * self.S_XF
             self.S_FX = num_new_meas / N * S_FX + (N - num_new_meas) / N * self.S_FX
@@ -766,7 +794,7 @@ class FRF:
             raise Exception("Currently not implemented for MISO and MIMO systems.")
         else:  # SISO, SIMO
             for i in range(self.resp.shape[1]):
-                ods_frf[i,:,:] = np.sqrt(self.S_XX[i,i,:]) * self.S_XF[i,:,:] / np.abs(self.S_XF[i,:,:])
+                ods_frf[i,:,:] = np.sqrt(self._S_XX[i,0,:]) * self.S_XF[i,:,:] / np.abs(self.S_XF[i,:,:])
         return ods_frf * self.frf_conversion
     
 
@@ -788,7 +816,7 @@ class FRF:
             k = self.resp_window_amp_norm
             
             for i in range(self.resp.shape[1]):
-                amp[i,:] = np.sqrt(np.abs(self.S_XX[i,i,:]))
+                amp[i,:] = np.sqrt(np.abs(self._S_XX[i,0,:]))
 
             if amplitude_spectrum:
                 return k * amp * self.frf_conversion
@@ -861,16 +889,15 @@ class FRF:
         """
         with np.errstate(invalid='ignore'):
             S_XF = self.S_XF
-            S_XX = self.S_XX
+            S_XX = self._S_XX
             if self.exc.shape[1] == 1:  # SISO, SIMO
-                S_XX = np.diagonal(S_XX).T[:, None, :] # diagonal elements of S_XX, reshaped to (resp_DOF, 1, freq)
-                for i in range(self.resp.shape[1]):
-                    H2 = self.frf_norm * S_XX / S_XF 
+                # S_XX is already stored as the (resp_DOF, 1, freq) response auto-spectra
+                H2 = self.frf_norm * S_XX / S_XF
             else:
                 freq_len = np.fft.rfftfreq(self.fft_len, 1. / self.sampling_freq).shape[0]
                 H2 = np.zeros((self.resp.shape[1], self.exc.shape[1], freq_len), dtype="complex128")
                 for i in range(freq_len):
-                    H2[:, :, i] = self.frf_norm * (self._matrix_inverse(self.S_XF[:, :, i]) @ self.S_XX[:, :, i]).T 
+                    H2[:, :, i] = self.frf_norm * (self._matrix_inverse(self.S_XF[:, :, i]) @ self._S_XX[:, :, i]).T 
             return (H2 * self.frf_conversion) / self._correct_time_delay()
         
     def get_Hv(self):
@@ -896,8 +923,8 @@ class FRF:
                 k = 1  # ratio of the spectra of measurement noises
                 #print("single input")
                 for i in range(self.resp.shape[1]):
-                    Hv[i,:,:] = self.frf_norm * ((self.S_XX[i,i,:] - k * self.S_FF[0,0,:] + np.sqrt(\
-                        (k * self.S_FF[0,0,:] - self.S_XX[i,i,:]) ** 2 + 4 * k * np.conj(self.S_FX[0,i,:]) * self.S_FX[0,i,:]))\
+                    Hv[i,:,:] = self.frf_norm * ((self._S_XX[i,0,:] - k * self.S_FF[0,0,:] + np.sqrt(\
+                        (k * self.S_FF[0,0,:] - self._S_XX[i,0,:]) ** 2 + 4 * k * np.conj(self.S_FX[0,i,:]) * self.S_FX[0,i,:]))\
                                                 / (2 * self.S_XF[i,0,:]))
             return (Hv * self.frf_conversion )/ self._correct_time_delay()
     
@@ -961,7 +988,7 @@ class FRF:
                     else:
                         for j in range(freq_len):
                             coh[i,j] = ((self.S_XF[i,:,j] @ np.linalg.inv(self.S_FF[:,:,j])) @ self.S_FX[:,i,j])
-                    coh[i] = coh[i] / self.S_XX[i,i]
+                    coh[i] = coh[i] / self._S_XX[i,i]
                 return coh
 
 

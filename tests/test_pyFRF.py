@@ -233,9 +233,18 @@ def test_FRF_SIMO_add_all_equals_per_channel():
     # invariant 1: S_FX is the conjugate transpose of S_XF
     np.testing.assert_allclose(frf_all.S_FX, np.conj(frf_all.S_XF).transpose(1, 0, 2),
                                rtol=0, atol=1e-20)
-    # invariant 2: for single input the off-diagonal of S_XX is never computed
+    # invariant 2: single-input S_XX is stored compactly as the response auto-spectra
+    # (n_resp, 1, freq), but the public S_XX property stays backward compatible: it
+    # returns the full (n_resp, n_resp, freq) matrix with zeros off-diagonal.
+    freq_len = np.fft.rfftfreq(N_welch, 1. / fs).shape[0]
+    n_resp = len(resp_dofs)
+    assert frf_all._S_XX.shape == (n_resp, 1, freq_len)          # compact internal store
+    assert frf_all.S_XX.shape == (n_resp, n_resp, freq_len)      # full public matrix
+    # diagonal holds the auto-spectra, off-diagonal is zero
+    for i in range(n_resp):
+        np.testing.assert_allclose(frf_all.S_XX[i, i, :], frf_all._S_XX[i, 0, :])
     off_diagonal = frf_all.S_XX.copy()
-    for i in range(len(resp_dofs)):
+    for i in range(n_resp):
         off_diagonal[i, i, :] = 0
     assert np.all(off_diagonal == 0)
 

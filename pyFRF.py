@@ -547,8 +547,11 @@ class FRF:
         :return:
         """
         
-        self.exc *= self.exc_window_data
-        self.resp *= self.resp_window_data
+        # multiplying by the all-ones 'none' window would be a no-op; skip the pass
+        if self.exc_window.split(':')[0] != 'none':
+            self.exc *= self.exc_window_data
+        if self.resp_window.split(':')[0] != 'none':
+            self.resp *= self.resp_window_data
     
     def _get_window_sub(self, length, window='none'):
         """
@@ -669,10 +672,33 @@ class FRF:
         full[idx, idx, :] = self._S_XX[:, 0, :]
         return full
 
+    def _segment_ffts(self, signals):
+        """
+        Windowed segment FFTs of a block of signals, replicating the segmentation
+        used by ``scipy.signal.csd`` (detrend='constant', the csd window, ``nperseg``
+        segments with ``noverlap`` overlap, zero-padded to ``fft_len``).
+
+        :param signals: ndarray of shape (channels, time).
+        :return: complex ndarray of shape (channels, segments, freq).
+        :rtype: ndarray
+        """
+        step = self.nperseg - self.noverlap
+        segments = np.lib.stride_tricks.sliding_window_view(
+            signals[:, :self.fft_len_cutoff], self.nperseg, axis=-1)[:, ::step, :]
+        segments = segments - segments.mean(axis=-1, keepdims=True)  # detrend='constant'
+        return scipy.fft.rfft(segments * self.csd_window_data, n=self.fft_len, axis=-1,
+                              workers=-1)
+
     def _get_frf_av(self):
         """
-        Calculates the averaged FRF based on averaging and weighting type, using scipy.csd.
+        Calculates the averaged cross/auto spectra based on averaging and weighting type.
 
+        Each channel's segment FFT is computed exactly once (batched over channels and
+        segments) and every cross/auto spectrum is then formed as the vectorised product
+        ``conj(A) * B``, scaled identically to ``scipy.signal.csd`` with
+        ``scaling='density'`` and a one-sided spectrum. This avoids the per-channel-pair
+        ``scipy.signal.csd`` calls, which recomputed the FFT of the same signal for every
+        pair and paid the csd setup overhead once per pair.
 
         Literature:
             [1] Haylen, Lammens, Sas: ISMA 2011 Modal Analysis Theory and Testing page: A.2.27
@@ -692,57 +718,41 @@ class FRF:
         S_XX = np.zeros((self.resp.shape[1], 1 if single_input else self.resp.shape[1], freq_len), dtype="complex128")
         S_FF = np.zeros((self.exc.shape[1], self.exc.shape[1], freq_len), dtype="complex128")
         S_XF = np.zeros((self.resp.shape[1], self.exc.shape[1], freq_len), dtype="complex128")
-        S_FX = np.zeros((self.exc.shape[1], self.resp.shape[1], freq_len), dtype="complex128")
 
-        #print("newly added measurements (csd calculating): ", self.resp.shape[0])
-        
-        #print("nperseg: ", self.nperseg)
-        #print("samples: ", self.samples)
-        #print("noverlap: ", self.noverlap)
-        #print("fft_len: ", self.fft_len)
+        # scipy.signal.csd 'density' scaling and one-sided doubling (every bin except
+        # DC and, for an even fft_len, Nyquist carries the mirrored negative frequency).
+        window = np.asarray(self.csd_window_data, dtype=np.float64)
+        onesided_scale = np.full(freq_len, 2. / (self.sampling_freq * np.sum(window * window)))
+        onesided_scale[0] /= 2.
+        if self.fft_len % 2 == 0:
+            onesided_scale[-1] /= 2.
 
-        def _csd(sig_a, sig_b):
-            return scipy.signal.csd(sig_a[:self.fft_len_cutoff], sig_b[:self.fft_len_cutoff],
-                                    self.sampling_freq, window=self.csd_window_data, nperseg=self.nperseg,
-                                    noverlap=self.noverlap, nfft=self.fft_len)[1]
-
-        for k in range(self.resp.shape[0]): # for each measurement
-            # Response auto/cross-spectra S_XX.
-            # The single-input estimators (H1, H2, Hv, ODS, coherence) only ever use the
-            # response auto-spectra, so for SISO/SIMO we compute just those (stored in the
-            # compact (n_resp, 1, freq) S_XX) and skip the O(n_resp**2) off-diagonal
-            # cross-spectra entirely. The full matrix is only needed by the multi-input
-            # H2 estimator. This is the main fix for the SIMO slowdown reported in issue #20.
+        for k in range(self.resp.shape[0]):  # for each measurement
+            exc_fft = self._segment_ffts(self.exc[k])    # (n_exc, segments, freq)
+            resp_fft = self._segment_ffts(self.resp[k])  # (n_resp, segments, freq)
+            n_segments = exc_fft.shape[1]
+            # csd(a, b) averages conj(A) * B over segments; measurements accumulate by
+            # summation exactly as the per-pair csd calls did. Auto-spectra are computed
+            # in real arithmetic (conj(A) * A == |A|**2 with an exactly zero imaginary
+            # part), which avoids complex temporaries.
             if single_input:
-                for i in range(S_XX.shape[0]):
-                    S_XX[i,0] += _csd(self.resp[k][i], self.resp[k][i])
+                S_XX[:, 0, :] += np.mean(resp_fft.real**2 + resp_fft.imag**2, axis=1)
+                S_FF[:, 0, :] += np.mean(exc_fft.real**2 + exc_fft.imag**2, axis=1)
             else:
-                # S_XX is Hermitian (S_XX[j,i] == conj(S_XX[i,j])), so only the upper
-                # triangle needs a csd; the lower triangle is its conjugate mirror.
-                # Performance: n_resp*(n_resp+1)/2 csd calls per measurement instead of
-                # n_resp**2 -- about 2x fewer for many response channels.
-                for i in range(S_XX.shape[0]):
-                    for j in range(i, S_XX.shape[1]):
-                        c = _csd(self.resp[k][i], self.resp[k][j])
-                        S_XX[i,j] += c
-                        if i != j:
-                            S_XX[j,i] += np.conj(c)
-            # S_FF is Hermitian too; compute the upper triangle only.
-            # Performance: n_exc*(n_exc+1)/2 csd calls per measurement instead of n_exc**2.
-            for i in range(S_FF.shape[0]):
-                for j in range(i, S_FF.shape[1]):
-                    c = _csd(self.exc[k][i], self.exc[k][j])
-                    S_FF[i,j] += c
-                    if i != j:
-                        S_FF[j,i] += np.conj(c)
-            # Response-excitation cross-spectra. S_FX is the conjugate transpose of S_XF
-            # (csd(f, x) == conj(csd(x, f))), so compute S_XF once and mirror it into S_FX
-            # instead of recomputing every cross-spectrum a second time.
-            for i in range(S_XF.shape[0]):      # response DOF
-                for j in range(S_XF.shape[1]):  # excitation DOF
-                    c = _csd(self.resp[k][i], self.exc[k][j])
-                    S_XF[i,j] += c
-                    S_FX[j,i] += np.conj(c)
+                S_XX += np.einsum('isf,jsf->ijf', np.conj(resp_fft), resp_fft) / n_segments
+                S_FF += np.einsum('isf,jsf->ijf', np.conj(exc_fft), exc_fft) / n_segments
+            # Accumulate conj(S_XF) = R * conj(E) -- conjugating exc_fft (the smaller
+            # array) in place instead of resp_fft; one final in-place conjugation below
+            # turns the accumulator into S_XF.
+            np.conjugate(exc_fft, out=exc_fft)
+            S_XF += np.einsum('isf,jsf->ijf', resp_fft, exc_fft) / n_segments
+
+        np.conjugate(S_XF, out=S_XF)
+        S_XX *= onesided_scale
+        S_FF *= onesided_scale
+        S_XF *= onesided_scale
+        # S_FX is the conjugate transpose of S_XF (csd(f, x) == conj(csd(x, f))).
+        S_FX = np.conj(S_XF).transpose(1, 0, 2)
 
         if self.ntimes_meas_added == 1:  # if the measurements are added for the first time:
             #print(self.ntimes_meas_added, " time the measurements were added - csd")                        

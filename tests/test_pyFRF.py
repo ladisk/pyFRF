@@ -733,6 +733,47 @@ def test_FRF_SIMO_pylump_output_noise():
     assert np.nanmax(coh[:, sl]) <= 1.0 + 1e-9       # bounded above by 1
 
 
+def test_spectra_match_scipy_csd():
+    """Regression test for the single-FFT cross-spectra computation.
+
+    ``_get_frf_av`` computes each channel's windowed segment FFT once and forms
+    every cross/auto spectrum as a vectorised ``conj(A) * B`` product. Verify the
+    stored spectra match per-channel-pair ``scipy.signal.csd`` calls (identical
+    window, segmentation, 'constant' detrending and one-sided 'density' scaling)
+    for single- and multi-input cases, including Welch segments and zero-padding.
+    """
+    rng = np.random.default_rng(3)
+    fs = 300
+    T = 4 * fs
+    n_meas = 3
+    for n_exc, n_resp, nperseg, noverlap, fft_len in (
+            (1, 4, None, None, T),      # SIMO, one segment spanning the data
+            (1, 3, 256, 100, 512),      # SIMO, Welch segments + zero-padding
+            (2, 3, 256, 128, 256)):     # MIMO, Welch segments
+        exc = rng.standard_normal((n_meas, n_exc, T))
+        resp = rng.standard_normal((n_meas, n_resp, T))
+        obj = pyFRF.FRF(sampling_freq=fs, exc=exc, resp=resp, window='hann',
+                        exc_type='f', resp_type='a',
+                        nperseg=nperseg, noverlap=noverlap, fft_len=fft_len)
+
+        def csd(a, b):
+            return scipy.signal.csd(a, b, fs, window=obj.csd_window_data,
+                                    nperseg=obj.nperseg, noverlap=obj.noverlap,
+                                    nfft=obj.fft_len)[1]
+
+        for i in range(n_resp):
+            expected = np.mean([csd(resp[k, i], resp[k, i]) for k in range(n_meas)], axis=0)
+            np.testing.assert_allclose(obj.S_XX[i, i], expected, rtol=1e-7, atol=1e-13)
+            for j in range(n_exc):
+                expected = np.mean([csd(resp[k, i], exc[k, j]) for k in range(n_meas)], axis=0)
+                np.testing.assert_allclose(obj.S_XF[i, j], expected, rtol=1e-7, atol=1e-13)
+                np.testing.assert_allclose(obj.S_FX[j, i], np.conj(expected), rtol=1e-7, atol=1e-13)
+        for i in range(n_exc):
+            for j in range(n_exc):
+                expected = np.mean([csd(exc[k, i], exc[k, j]) for k in range(n_meas)], axis=0)
+                np.testing.assert_allclose(obj.S_FF[i, j], expected, rtol=1e-7, atol=1e-13)
+
+
 def test_frf_conversion_no_dc_warning():
     """Building an accelerance/mobility FRF must not spam divide-by-zero warnings.
 

@@ -24,7 +24,7 @@ Make an instance of ``FRF`` class:
         nperseg=None,
         noverlap=None,
         archive_time_data=False,
-        frf_type='H1',
+        frf_estimator='H1',
         copy=True
     )
 
@@ -43,7 +43,7 @@ Preferable way to get the frequency response functions is via ``get_FRF()`` meth
 
 .. code:: python
 
-    frf = a.get_FRF(type="default", form="receptance")
+    frf = a.get_FRF(frf_estimator="default", frf_form="receptance")
 
 We can also directly get the requested FRF via other methods: ``get_H1()``, ``get_H2()``, ``get_Hv()`` and, ``get_ods_frf()``:
 
@@ -53,6 +53,13 @@ We can also directly get the requested FRF via other methods: ``get_H1()``, ``ge
     H2 = a.get_H2()
     Hv = a.get_Hv()
     ods_frf = a.get_ods_frf()
+
+Changes in 1.5.0:
+~~~~~~~~~~~~~~~~~~
+The ``FRF`` constructor keyword ``frf_estimator`` and the ``get_FRF()`` keywords
+``frf_estimator``/``frf_form`` are available since 1.5.0. The old names
+(``frf_type`` on the constructor, and ``type``/``form`` on ``get_FRF()``) still
+work but raise a ``DeprecationWarning``.
 
 .. _documentation: https://pyfrf.readthedocs.io/en/latest/
 

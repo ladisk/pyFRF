@@ -30,7 +30,7 @@ We start by creating the FRF object the following way:
         nperseg=None,
         noverlap=None,
         archive_time_data=False,
-        frf_type='H1',
+        frf_estimator='H1',
         copy=True
     )
 
@@ -114,9 +114,13 @@ Used for archiving time data.
 .. note::
     Can consume a lot of memory.
 
-``frf_type`` argument
-~~~~~~~~~~~~~~~~~~~~~
-Default FRF type returned at ``self.get_frf()``.
+``frf_estimator`` argument
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+Default FRF estimator returned at ``self.get_FRF()``.
+
+.. note::
+    Since 1.5.0. The old constructor keyword ``frf_type`` still works but raises a
+    ``DeprecationWarning``.
 
 ``copy`` argument
 ~~~~~~~~~~~~~~~~~
@@ -184,19 +188,20 @@ Obtaining FRF
 
 ``get_FRF()`` method
 ~~~~~~~~~~~~~~~~~~~~
-Preferable way to get the frequency response functions is via ``get_FRF()`` method, where we use the ``type`` argument to specify 
-the type of FRF. By default the returned FRF type is the one set at object creation (if no type is specified at object creation then 
-the type is set to H1). With the argument ``form`` we control the returned form of the FRF (receptance by default).
+Preferable way to get the frequency response functions is via ``get_FRF()`` method, where we use the ``frf_estimator`` argument to specify
+the FRF estimator. By default the returned estimator is the one set at object creation (if none is specified at object creation then
+it is set to H1). With the argument ``frf_form`` we control the returned form of the FRF (receptance by default).
 
 As result we get the FRF matrix (``ndarray``) of shape ``(resp_dofs, exc_dofs, frequency_series)``:
 
 .. code:: python
 
-    frf = a.get_FRF(type="default", form="receptance")
+    frf = a.get_FRF(frf_estimator="default", frf_form="receptance")
 
 .. note::
-    | ``type`` argument options: ``'H1', 'H2', 'Hv', 'ODS'``
-    | ``form`` argumnet options: ``'accelerance', 'mobility', 'receptance'``
+    | ``frf_estimator`` argument options: ``'H1', 'H2', 'Hv', 'ODS'``
+    | ``frf_form`` argument options: ``'accelerance', 'mobility', 'receptance'``
+    | Since 1.5.0. The old ``get_FRF()`` keywords ``type``/``form`` still work but raise a ``DeprecationWarning``.
 
 Other (direct) methods
 ~~~~~~~~~~~~~~~~~~~~~~

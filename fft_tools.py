@@ -48,7 +48,7 @@ def frequency_derivation(ffts, omega, order=1):
     with np.errstate(invalid='ignore'):    
         return multiply(ffts, np.power(1.j * omega, order))
 
-def convert_frf(input_frfs, omega, input_frf_type, output_frf_type):
+def convert_frf(input_frfs, omega, input_frf_form, output_frf_form):
     """ Converting the frf accelerance/mobility/receptance
 
     The most general case is when `input_frfs` is of shape:
@@ -56,8 +56,8 @@ def convert_frf(input_frfs, omega, input_frf_type, output_frf_type):
 
     :param input_frfs:  frequency response function vector (of dim 1, 2 or 3)
     :param omega: [rad/s] angular frequency vector
-    :param input_frf_type: 'd' receptance, 'v' mobility, 'a' accelerance (of dim 0, 1, 2)
-    :param output_frf_type: 'd' receptance, 'v' mobility, 'a' accelerance (of dim 0, 1, 2)
+    :param input_frf_form: 'd' receptance, 'v' mobility, 'a' accelerance (of dim 0, 1, 2)
+    :param output_frf_form: 'd' receptance, 'v' mobility, 'a' accelerance (of dim 0, 1, 2)
     :return: frequency response function vector (of dim 1, 2 or 3)
     """
     # put all data to 3D frf type (nr_inputs * nr_outputs * frf_len)
@@ -67,45 +67,45 @@ def convert_frf(input_frfs, omega, input_frf_type, output_frf_type):
     elif len(ini_shape) == 2:
         input_frfs = np.expand_dims(input_frfs, axis=0)
 
-        if type(input_frf_type) == str:
-            input_frf_type = [ini_shape[0]*[input_frf_type]]
+        if type(input_frf_form) == str:
+            input_frf_form = [ini_shape[0]*[input_frf_form]]
         else:
-            input_frf_type = [input_frf_type]
+            input_frf_form = [input_frf_form]
 
-        if type(output_frf_type) == str:
-            output_frf_type = [ini_shape[0]*[output_frf_type]]
+        if type(output_frf_form) == str:
+            output_frf_form = [ini_shape[0]*[output_frf_form]]
         else:
-            output_frf_type = [output_frf_type]
+            output_frf_form = [output_frf_form]
     elif len(ini_shape) == 1:
         input_frfs = np.expand_dims(np.expand_dims(input_frfs, axis=0), axis=0)
-        input_frf_type = [[input_frf_type]]
-        output_frf_type = [[output_frf_type]]
+        input_frf_form = [[input_frf_form]]
+        output_frf_form = [[output_frf_form]]
 
     # reshaping of frfs
     (nr_inputs, nr_outputs, frf_len) = input_frfs.shape
     nr_frfs = nr_inputs * nr_outputs
     input_frfs = input_frfs.reshape(nr_frfs,-1)
 
-    # reshaping of input and output frf types
-    input_frf_type = np.asarray(input_frf_type)
-    output_frf_type = np.asarray(output_frf_type)
-    if len(input_frf_type.shape) != 2 or len(output_frf_type.shape) !=2:
-        raise Exception('Input and output frf type should be of dimension 2.')
-    input_frf_type = input_frf_type.flatten()
-    output_frf_type = output_frf_type.flatten()
-    if len(input_frf_type) != nr_frfs or len(output_frf_type) != nr_frfs:
-        raise Exception('Input and output frf type length should correspond to the number frfs.')
+    # reshaping of input and output frf forms
+    input_frf_form = np.asarray(input_frf_form)
+    output_frf_form = np.asarray(output_frf_form)
+    if len(input_frf_form.shape) != 2 or len(output_frf_form.shape) !=2:
+        raise Exception('Input and output frf form should be of dimension 2.')
+    input_frf_form = input_frf_form.flatten()
+    output_frf_form = output_frf_form.flatten()
+    if len(input_frf_form) != nr_frfs or len(output_frf_form) != nr_frfs:
+        raise Exception('Input and output frf form length should correspond to the number frfs.')
 
     try:
-        input_frf_type = [_FRF_TYPES[_] for _ in input_frf_type]
-        output_frf_type = [_FRF_TYPES[_] for _ in output_frf_type]
+        input_frf_form = [_FRF_TYPES[_] for _ in input_frf_form]
+        output_frf_form = [_FRF_TYPES[_] for _ in output_frf_form]
     except:
-        raise('Only frf types: d, v and a are supported.')
+        raise('Only frf forms d, v and a are supported.')
 
     # do the conversion
     output_frfs = np.zeros_like(input_frfs)
     for i in range(nr_frfs):
-        order = output_frf_type[i] - input_frf_type[i]
+        order = output_frf_form[i] - input_frf_form[i]
         if (order > 2) or (order <-2):
             raise Exception('FRF conversion not supported.')
         output_frfs[i, :] = frequency_derivation(input_frfs[i, :], omega, order=order)

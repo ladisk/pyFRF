@@ -791,7 +791,7 @@ def test_frf_conversion_no_dc_warning():
             warnings.simplefilter("always")
             obj = pyFRF.FRF(sampling_freq=1000, exc=exc, resp=resp, exc_type='f',
                             resp_type=resp_type, window='hann', fft_len=N)
-            obj.get_FRF('H1', form='accelerance')
+            obj.get_FRF('H1', frf_form='accelerance')
         offending = [str(w.message) for w in caught
                      if issubclass(w.category, RuntimeWarning)
                      and ('divide by zero' in str(w.message) or 'invalid value' in str(w.message))]

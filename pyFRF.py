@@ -11,7 +11,7 @@ from sdypy_sep005.sep005 import assert_sep005
 import scipy
 import warnings
 
-__version__ = '1.4.0'
+__version__ = '1.5.0'
 _EXC_TYPES = ['f', 'a', 'v', 'd', 'e']  # force for EMA and kinematics for OMA
 _RESP_TYPES = ['a', 'v', 'd', 'e']  # acceleration, velocity, displacement, strain
 _FRF_TYPES = ['H1', 'H2', 'Hv', 'ODS']
@@ -53,9 +53,11 @@ class FRF:
                  nperseg=None,
                  noverlap=None,
                  archive_time_data=False,
-                 frf_type='H1',
+                 frf_estimator='H1',
                  copy=True,
                  analytical_inverse=False,
+                 *,
+                 frf_type=None,
                  **kwargs):
         """
         Initiates the Data class:
@@ -149,8 +151,8 @@ class FRF:
         :param archive_time_data: Archive the time data (this can consume a lot of memory).
         :type archive_time_data: bool
 
-        :param frf_type: Default frf type returned at self.get_frf(), see _FRF_TYPES.
-        :type frf_type: str
+        :param frf_estimator: Default FRF estimator returned at self.get_FRF(), see _FRF_TYPES.
+        :type frf_estimator: str
 
         :param copy: If true the excitation and response arrays are copied 
             (if data is not copied the applied window affects the source arrays).
@@ -164,6 +166,10 @@ class FRF:
             rank-deficient spectral matrices. In all cases the inversion is now performed for
             every frequency line at once rather than in a Python loop.
         :type analytical_inverse: bool
+
+        :param frf_type: Deprecated since 1.5.0, use frf_estimator instead. If given,
+            it wins over frf_estimator and emits a DeprecationWarning.
+        :type frf_type: str
         """
         # previous pyFRF kwargs:
         if ("exc_window" in kwargs) or ("resp_window" in kwargs):
@@ -171,6 +177,10 @@ class FRF:
         if ("n_averages" in kwargs):
             raise ValueError("The n_averages argument is no longer supported. You can pass different array shapes of excitation "\
                              "and response data or provide N for exponential averaging through weighting argument.")
+
+        if frf_type is not None:
+            warnings.warn("frf_type is deprecated; use frf_estimator instead", DeprecationWarning, stacklevel=2)
+            frf_estimator = frf_type
 
         # Parse possible SEP-005 input:
         is_sep_exc = isinstance(exc, (dict, list))
@@ -259,7 +269,7 @@ class FRF:
             #print("force window used with csd")
             warnings.warn("force window used with csd")
         
-        self.frf_type = frf_type
+        self.frf_estimator = frf_estimator
         self.copy = copy
         self.analytical_inverse = analytical_inverse
 
@@ -307,9 +317,9 @@ class FRF:
         self.archive_time_data = archive_time_data
         
          # error checking
-        if not (self.frf_type in _FRF_TYPES):
-            raise Exception('wrong FRF type given %s (can be %s)'
-                            % (self.frf_type, _FRF_TYPES))
+        if not (self.frf_estimator in _FRF_TYPES):
+            raise Exception('wrong FRF estimator given %s (can be %s)'
+                            % (self.frf_estimator, _FRF_TYPES))
         
         if not (self.weighting.split(':')[0] in _WGH_TYPES):
             raise Exception('wrong weighting type given %s (can be %s)'
@@ -340,8 +350,24 @@ class FRF:
 
         if exc is not None and resp is not None:
             self.add_data(exc, resp)
-            
-            
+
+    @property
+    def frf_type(self):
+        """Deprecated since 1.5.0, use frf_estimator instead."""
+        warnings.warn("frf_type is deprecated; use frf_estimator instead", DeprecationWarning, stacklevel=2)
+        return self.frf_estimator
+
+    @frf_type.setter
+    def frf_type(self, value):
+        warnings.warn("frf_type is deprecated; use frf_estimator instead", DeprecationWarning, stacklevel=2)
+        self.frf_estimator = value
+
+    def __setstate__(self, state):
+        if "frf_type" in state:
+            state = dict(state)
+            state["frf_estimator"] = state.pop("frf_type")
+        self.__dict__.update(state)
+
     def add_data(self, exc, resp):
         """
         Adds new data - called at object creation if excitation and response signals are given.
@@ -966,40 +992,53 @@ class FRF:
             return (Hv * self.frf_conversion )/ self._correct_time_delay()
     
         
-    def get_FRF(self, type='default', form='receptance'):
+    def get_FRF(self, frf_estimator='default', frf_form='receptance', *, type=None, form=None):
         """
         Returns the default FRF function set at init.
 
-        :param type: Choose default (as set at init) or H1, H2, Hv or ODS.
+        :param frf_estimator: Choose default (as set at init) or H1, H2, Hv or ODS.
+        :type frf_estimator: str
+        :param frf_form: Choose receptance, mobility, accelerance.
+        :type frf_form: str
+        :param type: Deprecated since 1.5.0, use frf_estimator instead. If given,
+            it wins over frf_estimator and emits a DeprecationWarning.
         :type type: str
-        :param form: Choose receptance, mobility, accelerance.
+        :param form: Deprecated since 1.5.0, use frf_form instead. If given,
+            it wins over frf_form and emits a DeprecationWarning.
         :type form: str
         :return: FRF estimator matrix (ndarray).
         :rtype: ndarray
         """
-        if type=='default':
-            type=self.frf_type
-        if not (type in _FRF_TYPES):
-            raise Exception('wrong FRF type given %s (can be %s)'
-                            % (type, _FRF_TYPES))
+        if type is not None:
+            warnings.warn("type is deprecated; use frf_estimator instead", DeprecationWarning, stacklevel=2)
+            frf_estimator = type
+        if form is not None:
+            warnings.warn("form is deprecated; use frf_form instead", DeprecationWarning, stacklevel=2)
+            frf_form = form
 
-        if type == 'H1':
+        if frf_estimator=='default':
+            frf_estimator=self.frf_estimator
+        if not (frf_estimator in _FRF_TYPES):
+            raise Exception('wrong FRF estimator given %s (can be %s)'
+                            % (frf_estimator, _FRF_TYPES))
+
+        if frf_estimator == 'H1':
             receptance = self.get_H1()
-        if type == 'H2':
+        if frf_estimator == 'H2':
             receptance = self.get_H2()
-        if type == 'Hv':
+        if frf_estimator == 'Hv':
             receptance = self.get_Hv()
-        if type == 'ODS':
+        if frf_estimator == 'ODS':
             receptance = self.get_ods_frf()
 
-        if not (form in _FRF_FORM):
+        if not (frf_form in _FRF_FORM):
             raise Exception('wrong FRF form given %s (can be %s)'
-                            % (form, _FRF_FORM))
-        
+                            % (frf_form, _FRF_FORM))
+
         # convert to requested frf form:
-        if form=='accelerance':
+        if frf_form=='accelerance':
             return receptance * np.power(1.j * self.get_w_axis(), 2)
-        if form=='mobility':
+        if frf_form=='mobility':
             return receptance * np.power(1.j * self.get_w_axis(), 1)
         return receptance
         

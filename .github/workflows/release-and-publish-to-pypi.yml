@@ -8,21 +8,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v7
         with:
-          python-version: '3.11'
+          python-version: '3.12'
 
-      - name: Install dependencies
-        run: pip install setuptools wheel twine build
+      - name: Install build tooling
+        run: python -m pip install --upgrade pip build
 
       - name: Build package
         run: python -m build
 
+      # release/v1 is the pointer the action maintainers recommend: it tracks
+      # the latest v1.x release so the bundled twine keeps up with new
+      # core-metadata versions emitted by the build backend.
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@v1.13.0
+        uses: pypa/gh-action-pypi-publish@release/v1
         with:
           user: __token__
           password: ${{ secrets.PYPI_API_TOKEN }}

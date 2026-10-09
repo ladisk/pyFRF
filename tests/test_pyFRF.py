@@ -151,9 +151,10 @@ def test_FRF_MIMO():
     PSD = pyExSi.get_psd(freq, freq_lower, freq_upper) # one-sided flat-shaped PSD
     f = np.zeros((n_measurements, len(exc_dofs), t.shape[0]))
 
+    rg = np.random.default_rng(2026)  # seeded: the test compares against the true FRF
     for i in range(f.shape[0]):
         for j in range(f.shape[1]):
-            f[i][j] = pyExSi.random_gaussian(f.shape[-1], PSD, fs)
+            f[i][j] = pyExSi.random_gaussian(f.shape[-1], PSD, fs, rg=rg)
     x = get_response(f, FRF_matrix, exc_dofs, resp_dofs)
 
     # get relevant FRFs from FRF matrix based on excitation dofs and response dofs:
@@ -176,10 +177,10 @@ def test_FRF_MIMO():
         np.testing.assert_allclose(np.abs(H[:, :, 1:-1]), np.abs(true_frf[:,:,1:-1]), 
                                 rtol=5e-01, atol=1e-06)
                 
-        # test frf phase:
-        np.testing.assert_allclose(np.angle(H[:, :, 1:-1]),
-                                   np.angle(true_frf[:,:,1:-1]),
-                                   rtol=5e-1, atol=3e-01)
+        # test frf phase: compare the wrapped phase difference, so a true phase
+        # near +-pi cannot fail the test by wrapping to the other side
+        phase_diff = np.angle(H[:, :, 1:-1] * np.conj(true_frf[:, :, 1:-1]))
+        np.testing.assert_allclose(phase_diff, 0.0, atol=3e-01)
 
 
 def test_FRF_SIMO_add_all_equals_per_channel():

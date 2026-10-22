@@ -283,6 +283,7 @@ class FRF:
         # set averaging and weighting
         self.weighting = weighting
         self.frf_norm = 1.
+        self.window_decay_rate = 0.  # decay rate sigma (1/s) an exponential window adds to every pole
 
         if exc is not None:
             if len(exc.shape) == 1:
@@ -612,13 +613,21 @@ class FRF:
             w = np.arange(length)
             exponential_window = float(window[1])
             w = np.exp(np.log(exponential_window) * w / (length - 1))
+            # w = exp(-sigma * t) with sigma = -ln(a) / T; the FRF is evaluated at s = sigma + j*omega,
+            # i.e. every pole lambda_r = -zeta_r*omega_r + j*omega_dr is shifted by -sigma
+            self.window_decay_rate = -np.log(exponential_window) * self.sampling_freq / (length - 1)
+            warnings.warn(f"exponential window adds the decay rate sigma = {self.window_decay_rate:.4g} 1/s "
+                          f"to every pole: the identified damping ratio of a mode with natural frequency omega_r "
+                          f"(rad/s) is too high by sigma/omega_r (stored in window_decay_rate)")
         elif window[0] in ['none']:
             w = np.ones(length)
 
-        if window[0] == 'force':
+        if window[0] in ['force', 'exponential']:
+            # transient windows: the signal sits where the window is ~1, so no amplitude
+            # correction; the exponential window only adds damping (see warning above)
             amplitude_norm = 2 / len(w)
         else:
-            amplitude_norm = 2 / np.sum(w)
+            amplitude_norm = 2 / np.sum(w)  # coherent gain of a stationary-signal window
 
         return w, amplitude_norm
 

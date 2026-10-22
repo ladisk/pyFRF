@@ -799,6 +799,41 @@ def test_frf_conversion_no_dc_warning():
         assert not offending, f"resp_type={resp_type!r} emitted: {offending}"
 
 
+def test_exponential_window_no_amplitude_correction():
+    """An exponential window on an impact response must not rescale the FRF.
+
+    The window evaluates the FRF at s = sigma + j*omega (extra damping sigma, residues
+    unchanged), so the result is compared with the analytical receptance on that shifted
+    line; the old coherent-gain factor N / sum(w) (4.65 for a 1 % window) would fail this.
+    """
+    fs, N = 2000, 4000
+    t = np.arange(N) / fs
+    m, c, k = 1.0, 2.0, (2 * np.pi * 50) ** 2
+    wn = np.sqrt(k / m)
+    zeta = c / (2 * m * wn)
+    wd = wn * np.sqrt(1 - zeta ** 2)
+    x = np.exp(-zeta * wn * t) * np.sin(wd * t) / (m * wd)  # unit impulse response
+    f = np.zeros(N)
+    f[0] = fs                                               # unit impulse
+    a = 0.01
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        obj = pyFRF.FRF(sampling_freq=fs, exc=f, resp=x, exc_type='f', resp_type='d',
+                        window=('force:0.1', f'exponential:{a}'), fft_len=N)
+    assert any('sigma' in str(w.message) for w in caught)
+    assert obj.frf_norm == 1.0
+    np.testing.assert_allclose(obj.window_decay_rate, -np.log(a) / t[-1])
+    H = obj.get_FRF(frf_estimator='H1', frf_form='receptance')[0, 0]
+    freq = obj.get_f_axis()
+    s = -np.log(a) / t[-1] + 2j * np.pi * freq
+    H_shifted = 1 / (m * s ** 2 + c * s + k)
+    H_true = 1 / (k - m * (2 * np.pi * freq) ** 2 + 2j * np.pi * freq * c)
+    band = (freq >= 2) & (freq <= 100)  # above ~3 f_n the sampled impulse response deviates
+    np.testing.assert_allclose(np.abs(H[band]), np.abs(H_shifted[band]), rtol=2e-2)
+    low = (freq >= 2) & (freq <= 10)
+    np.testing.assert_allclose(np.abs(H[low]), np.abs(H_true[low]), rtol=2e-2)
+
+
 # Run the tests
 if __name__ == '__main__':
     np.testing.run_module_suite()

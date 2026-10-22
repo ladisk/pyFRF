@@ -77,6 +77,15 @@ signals and MIMO systems).
     | For exponential window the percentage of the starting amplitude (``float``) is required (e.g. 10%: ``"exponential:0.1"``).
     | For force window the length of window (percentage (``float``) of full signal) is required (e.g. 10%: ``"force:0.1"``).
 
+.. note::
+    The ``force`` and ``exponential`` windows are meant for impact signals and get no amplitude correction
+    (the other windows are corrected by their coherent gain). An exponential window with end amplitude ``a``
+    over a record of duration ``T`` shifts every pole by the decay rate ``sigma = -ln(a) / T`` (in 1/s, the
+    real part of the pole, not a viscous coefficient or a damping ratio). The identified damping ratio of a
+    mode with natural frequency ``omega_r`` (rad/s) is therefore too high by ``sigma / omega_r``; subtract
+    this from the identified value. ``sigma`` is stored in the ``window_decay_rate`` attribute and reported
+    in a warning when the window is applied.
+
 ``resp_delay`` argument
 ~~~~~~~~~~~~~~~~~~~~~~~
 Used if there is response time delay present (in seconds) with regards to the excitation - used for FFT (phase) correction.

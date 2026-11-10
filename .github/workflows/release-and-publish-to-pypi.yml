@@ -1,8 +1,20 @@
 name: Release and Publish to PyPI
+
+# Creating a GitHub Release (or pushing a tag vX.Y.Z) runs the tests, checks
+# that the tag matches pyFRF.__version__ in pyFRF.py (the single source of the
+# version), builds the package and publishes it to PyPI through trusted
+# publishing (no API token: PyPI trusts this workflow's OIDC token, see
+# https://docs.pypi.org/trusted-publishers/).
+
 on:
   push:
     tags:
       - 'v*'
+
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -15,17 +27,33 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: Install build tooling
-        run: python -m pip install --upgrade pip build
+      - name: Check that the tag matches the package version
+        run: |
+          tag="${GITHUB_REF#refs/tags/v}"
+          version=$(python -c "import re; print(re.search(r\"^__version__ = '([^']+)'\", open('pyFRF.py', encoding='utf-8').read(), re.M).group(1))")
+          if [ "$tag" != "$version" ]; then
+            echo "tag v$tag and pyFRF.__version__ $version do not agree" >&2
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -U build twine pytest
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Run tests
+        run: |
+          pip install .
+          pytest
 
       - name: Build package
-        run: python -m build
+        run: |
+          python -m build
+          python -m twine check dist/*
 
       # release/v1 is the pointer the action maintainers recommend: it tracks
       # the latest v1.x release so the bundled twine keeps up with new
       # core-metadata versions emitted by the build backend.
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          user: __token__
-          password: ${{ secrets.PYPI_API_TOKEN }}

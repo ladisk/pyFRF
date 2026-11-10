@@ -54,6 +54,11 @@ We can also directly get the requested FRF via other methods: ``get_H1()``, ``ge
     Hv = a.get_Hv()
     ods_frf = a.get_ods_frf()
 
+Changes in 1.5.1:
+~~~~~~~~~~~~~~~~~~
+Segment averaging (``nperseg``) now also works on 32-bit platforms, for example
+in the browser with Pyodide. Results are unchanged.
+
 Changes in 1.5.0:
 ~~~~~~~~~~~~~~~~~~
 The ``FRF`` constructor keyword ``frf_estimator`` and the ``get_FRF()`` keywords

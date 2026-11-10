@@ -709,8 +709,16 @@ class FRF:
         :rtype: ndarray
         """
         step = self.nperseg - self.noverlap
-        segments = np.lib.stride_tricks.sliding_window_view(
-            signals[:, :self.fft_len_cutoff], self.nperseg, axis=-1)[:, ::step, :]
+        signals = signals[:, :self.fft_len_cutoff]
+        # View only the segments that are used. A view of every possible window
+        # (sliding_window_view, then every step-th one) has a nominal size of
+        # channels * samples * nperseg items, which numpy refuses to create on
+        # 32-bit platforms (e.g. WebAssembly) already for short records.
+        n_segments = (signals.shape[-1] - self.nperseg) // step + 1
+        segments = np.lib.stride_tricks.as_strided(
+            signals, shape=(signals.shape[0], n_segments, self.nperseg),
+            strides=(signals.strides[0], step * signals.strides[1], signals.strides[1]),
+            writeable=False)
         segments = segments - segments.mean(axis=-1, keepdims=True)  # detrend='constant'
         return scipy.fft.rfft(segments * self.csd_window_data, n=self.fft_len, axis=-1,
                               workers=-1)

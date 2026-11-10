@@ -799,6 +799,36 @@ def test_frf_conversion_no_dc_warning():
         assert not offending, f"resp_type={resp_type!r} emitted: {offending}"
 
 
+def test_segment_ffts_match_explicit_segmentation():
+    """
+    ``_segment_ffts`` views only the segments it uses (``nperseg`` samples every
+    ``nperseg - noverlap`` samples). Verify it against an explicit loop over the
+    segments, for records whose length is not a multiple of the step and for a
+    non-contiguous input.
+    """
+    rng = np.random.default_rng(4)
+    fs = 256
+    for T, nperseg, noverlap, fft_len in (
+            (2048, 256, 128, 256),      # 50 % overlap, segments fit exactly
+            (2000, 256, 100, 512),      # samples left over at the end, zero-padding
+            (1500, 300, 0, 300),        # no overlap
+            (1024, 128, 127, 128)):     # step of one sample
+        exc = rng.standard_normal((1, 1, T))
+        resp = rng.standard_normal((1, 3, T))
+        obj = pyFRF.FRF(sampling_freq=fs, exc=exc, resp=resp, window='hann',
+                        nperseg=nperseg, noverlap=noverlap, fft_len=fft_len)
+        step = nperseg - noverlap
+        starts = range(0, T - nperseg + 1, step)
+
+        for signals in (resp[0], np.asfortranarray(resp[0]), rng.standard_normal((3, 2 * T))[:, ::2]):
+            expected = np.array([[
+                scipy.fft.rfft((x[i:i + nperseg] - x[i:i + nperseg].mean()) * obj.csd_window_data, n=fft_len)
+                for i in starts] for x in signals])
+            result = obj._segment_ffts(signals)
+            assert result.shape == (3, len(starts), fft_len // 2 + 1)
+            np.testing.assert_allclose(result, expected, rtol=1e-12, atol=1e-12)
+
+
 # Run the tests
 if __name__ == '__main__':
     np.testing.run_module_suite()

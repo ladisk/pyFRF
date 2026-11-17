@@ -5,7 +5,8 @@
 
 Welcome to pyFRF's documentation!
 =================================
-This is the documentation for pyFRF package. Check out the project source_.
+This is the documentation for pyFRF package, a port of `sdypy-FRF <https://github.com/sdypy/sdypy-FRF>`_,
+where the code is maintained. Check out the project source_.
 
 Check out the :doc:`tutorial <tutorial>` section for further information.
 
@@ -18,4 +19,4 @@ Check out the :doc:`tutorial <tutorial>` section for further information.
    code_documentation
 
 
-.. _source: https://github.com/ladisk/pyFRF
+.. _source: https://github.com/sdypy/sdypy-FRF

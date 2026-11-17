@@ -20,20 +20,13 @@ dynamic = ["version"]
 authors = [{name = "Janko Slavič, Luka Novak, Martin Česnik, et al.", email = "janko.slavic@fs.uni-lj.si"}]
 maintainers = [{name = "Janko Slavič, Luka Novak, Martin Česnik, et al.", email = "janko.slavic@fs.uni-lj.si"}]
 license = "MIT"
-description = "Frequency response function as used in structural dynamics."
+description = "Frequency response function as used in structural dynamics (port of sdypy-FRF)."
 readme = "readme.rst"
 keywords = ["FRF", "MIMO", "SIMO", "ODS"]
 requires-python = ">=3.13"
 
 dependencies = [
-    "colorama",
-    "py",
-    "lvm_read",
-    "pyExSi",
-    "matplotlib",
-    "numpy>=1.11.0",
-    "scipy>=1.2.0",
-    "sdypy-sep005"
+    "sdypy-FRF>=0.4.0",
 ]
 
 classifiers = [
@@ -52,7 +45,6 @@ dev = [
     "twine",
     "wheel",
     "pytest",
-    "pyLump; python_version >= '3.10'",
     "sphinx-rtd-theme",
     "nbsphinx",
     "nbsphinx_link",
@@ -63,4 +55,5 @@ dev = [
 [project.urls]
 homepage = "https://github.com/ladisk/pyFRF"
 documentation = "https://pyfrf.readthedocs.io/en/latest/"
-source = "https://github.com/ladisk/pyFRF"
+source = "https://github.com/sdypy/sdypy-FRF"
+issues = "https://github.com/sdypy/sdypy-FRF/issues"

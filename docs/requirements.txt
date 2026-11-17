@@ -1,6 +1,8 @@
-numpy
-scipy
+sdypy-FRF>=0.4.0
+lvm_read
+matplotlib
 nbsphinx
 sphinx-rtd-theme
 jupyter
 nbsphinx_link
+pyExSi

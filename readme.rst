@@ -3,6 +3,30 @@ pyFRF
 
 Frequency response function as used in structural dynamics.
 -----------------------------------------------------------
+
+``pyFRF`` is a port of `sdypy-FRF`_, which is part of the `SDyPy`_ project. The code is
+maintained in ``sdypy-FRF``; this package makes the same code available under the
+``pyFRF`` name, so that existing code keeps working.
+
+**Please report issues and open pull requests at** `sdypy-FRF`_.
+
+Installing ``pyFRF`` also installs ``sdypy-FRF``. These two imports give the same code:
+
+.. code:: python
+
+   import pyFRF
+   from sdypy import FRF as pyFRF
+
+For new code, use ``sdypy-FRF`` directly:
+
+.. code:: cmd
+
+   pip install sdypy-FRF
+
+.. code:: python
+
+   from sdypy import FRF
+
 For more information check out the showcase examples and see documentation_.
 
 Basic ``pyFRF`` usage:
@@ -66,6 +90,8 @@ The ``FRF`` constructor keyword ``frf_estimator`` and the ``get_FRF()`` keywords
 (``frf_type`` on the constructor, and ``type``/``form`` on ``get_FRF()``) still
 work but raise a ``DeprecationWarning``.
 
+.. _sdypy-FRF: https://github.com/sdypy/sdypy-FRF
+.. _SDyPy: https://github.com/sdypy
 .. _documentation: https://pyfrf.readthedocs.io/en/latest/
 
 |pytest|

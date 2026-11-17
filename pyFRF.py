@@ -3,7 +3,7 @@
 pyFRF is a port of sdypy-FRF (https://github.com/sdypy/sdypy-FRF), where the
 code is maintained. This module re-exports sdypy.FRF under the pyFRF name.
 """
-__version__ = '1.5.1'
+__version__ = '1.6.0'
 
 from sdypy.FRF import FRF, assert_sep005, direction_dict
 from sdypy.FRF.frf import (
